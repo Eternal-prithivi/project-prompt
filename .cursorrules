@@ -1,0 +1,11 @@
+Before doing anything in this project, read AI_MASTER.md 
+in the project root and follow its mandatory startup flow completely.
+Do not write any code until you have finished reading all files 
+listed in AI_MASTER.md's startup flow.
+
+Continuity requirements (mandatory):
+- Keep work continuous across new chats/agents by using repo docs, not chat memory.
+- If you are ending a session mid-task, you MUST write exact resume state into `SCRATCHPAD.md`.
+- After completing a task or ending a session, you MUST:
+  - append an entry to `AUDIT_LOG.md` (use `AGENT_SESSION_TEMPLATE.md`, include required `SESSION_ID`)
+  - update `PROGRESS.md` to reflect done/in-progress/next
