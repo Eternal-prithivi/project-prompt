@@ -89,7 +89,8 @@ describe('GeminiProvider', () => {
     });
 
     it('should throw error on API failure', async () => {
-      mockGlobalFetch.mockRejectedValueOnce(new Error('Network error'));
+      // With retry/backoff, the provider may retry multiple times.
+      mockGlobalFetch.mockRejectedValue(new Error('Network error'));
 
       await expect(provider.analyzePrompt('test')).rejects.toThrow();
     });
@@ -470,7 +471,8 @@ describe('GeminiProvider', () => {
 
   describe('error handling', () => {
     it('should handle network errors', async () => {
-      mockGlobalFetch.mockRejectedValueOnce(new Error('Network timeout'));
+      // With retry/backoff, the provider may retry multiple times.
+      mockGlobalFetch.mockRejectedValue(new Error('Network timeout'));
 
       await expect(provider.analyzePrompt('test')).rejects.toThrow('Network timeout');
     });
@@ -486,7 +488,8 @@ describe('GeminiProvider', () => {
     });
 
     it('should handle 429 rate limit errors', async () => {
-      mockGlobalFetch.mockRejectedValueOnce(new Error('429: Too Many Requests'));
+      // With retry/backoff, the provider may retry multiple times.
+      mockGlobalFetch.mockRejectedValue(new Error('429: Too Many Requests'));
 
       await expect(provider.runPrompt('test')).rejects.toThrow();
     });

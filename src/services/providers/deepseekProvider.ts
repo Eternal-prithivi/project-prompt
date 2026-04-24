@@ -9,6 +9,7 @@
 import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { fetchWithTimeout } from '../utils/timeout';
+import { retry, isRetryableStatus } from '../utils/retry';
 
 type ProviderTimeoutOptions = {
   timeoutMs?: number;
@@ -33,23 +34,26 @@ export class DeepseekProvider implements ILLMProvider {
     model: string = 'deepseek-chat',
     timeoutMs?: number
   ): Promise<string> {
-    const request = () => fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        response_format: { type: 'json_object' },
-        temperature: 1,
-      }),
-    });
-    const response = timeoutMs != null
-      ? await fetchWithTimeout(
-          `${this.baseUrl}${endpoint}`,
-          {
+    const doFetch = async () => {
+      const response = timeoutMs != null
+        ? await fetchWithTimeout(
+            `${this.baseUrl}${endpoint}`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model,
+                messages,
+                response_format: { type: 'json_object' },
+                temperature: 1,
+              }),
+            },
+            timeoutMs
+          )
+        : await fetch(`${this.baseUrl}${endpoint}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${this.apiKey}`,
@@ -61,10 +65,28 @@ export class DeepseekProvider implements ILLMProvider {
               response_format: { type: 'json_object' },
               temperature: 1,
             }),
-          },
-          timeoutMs
-        )
-      : await request();
+          });
+
+      // Retry transient HTTP statuses (429/5xx/etc). Don't retry auth errors.
+      if (!response.ok && isRetryableStatus(response.status)) {
+        const err: any = new Error(`DeepSeek transient HTTP ${response.status}`);
+        err.status = response.status;
+        throw err;
+      }
+
+      return response;
+    };
+
+    let response: Response;
+    try {
+      response = await retry(doFetch, { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 6000 });
+    } catch (e: any) {
+      const status = typeof e?.status === 'number' ? e.status : undefined;
+      if (status != null) {
+        throw new Error(`DeepSeek API error (${status}): transient failure`);
+      }
+      throw e;
+    }
 
     if (!response.ok) {
       const error = typeof (response as any).text === 'function' ? await response.text() : '';

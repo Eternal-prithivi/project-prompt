@@ -145,6 +145,12 @@ const VariationCard: React.FC<{
     setIsTesting(true);
     setTestResult(`Connecting to ${testModel}...`);
     try {
+      if (selectedEngine === 'local') {
+        const health = await validateOllamaConnection(ollamaUrl || 'http://localhost:11434');
+        if (!health.valid) {
+          throw new Error(health.error || 'Cannot connect to Ollama. Is it running? Try: ollama serve');
+        }
+      }
       const res = await runPrompt(resolvedContent, testModel);
       if (isMountedRef.current) setTestResult(res);
     } catch(e: any) {
@@ -510,6 +516,14 @@ export const Wizard = () => {
         return;
       }
 
+      if (selectedEngine === 'local') {
+        const health = await validateOllamaConnection(ollamaUrl || 'http://localhost:11434');
+        if (!health.valid) {
+          setErrorMsg(health.error || 'Cannot connect to Ollama. Is it running? Try: ollama serve');
+          return;
+        }
+      }
+
       if (credentialPassword && credentialPassword.trim().length > 0) {
         setCredentialPassword(credentialPassword);
       }
@@ -521,6 +535,10 @@ export const Wizard = () => {
       saveCredentials(newCreds);
       setCredentials(newCreds);
       setIsCredsLocked(false);
+
+      if (newCreds.selectedEngine === 'local' && newCreds.ollamaUrl) {
+        loadOllamaModels(newCreds.ollamaUrl);
+      }
 
       setIsSettingsOpen(false);
       setErrorMsg(null);
@@ -602,7 +620,31 @@ export const Wizard = () => {
     const newItem: HistoryItem = { id: Date.now().toString(), timestamp: Date.now(), input: initialInput || components.task, variations: newVariations };
     const updated = [newItem, ...history].slice(0, 50);
     setHistory(updated);
-    localStorage.setItem('prompt_history', JSON.stringify(updated));
+    try {
+      localStorage.setItem('prompt_history', JSON.stringify(updated));
+    } catch (e: any) {
+      // QuotaExceededError is common on Safari/low-storage devices.
+      const name = typeof e?.name === 'string' ? e.name : '';
+      const msg = typeof e?.message === 'string' ? e.message : '';
+      const isQuota = name === 'QuotaExceededError' || /quota/i.test(msg);
+
+      if (isQuota) {
+        // Attempt a best-effort recovery: keep only the latest 10 items.
+        try {
+          const trimmed = updated.slice(0, 10);
+          localStorage.setItem('prompt_history', JSON.stringify(trimmed));
+          setHistory(trimmed);
+          setErrorMsg('Storage is full. History was trimmed to the latest 10 items. You can clear browser site data to free space.');
+          return;
+        } catch {
+          setErrorMsg('Storage is full. Unable to save history. Clear browser site data to free space.');
+          return;
+        }
+      }
+
+      // Non-quota errors: don’t crash the UI, but surface it.
+      setErrorMsg('Unable to save history: ' + safeErrorMessage(e));
+    }
   };
 
   const handleGenerateVariations = async () => {
@@ -667,6 +709,12 @@ export const Wizard = () => {
       const runBattle = async () => {
         setIsFighting(true); setVerdict(null); setErrorMenu('');
         try {
+          if (selectedEngine === 'local') {
+            const health = await validateOllamaConnection(ollamaUrl || 'http://localhost:11434');
+            if (!health.valid) {
+              throw new Error(health.error || 'Cannot connect to Ollama. Is it running? Try: ollama serve');
+            }
+          }
           const mockA = a.content + '\n\n(IMPORTANT: Fill in any bracketed variables with reasonable dummy examples before answering.)';
           const mockB = b.content + '\n\n(IMPORTANT: Fill in any bracketed variables with reasonable dummy examples before answering.)';
 

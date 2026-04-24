@@ -2,8 +2,14 @@
  * Validate Gemini API key by testing against Google API
  */
 import { fetchWithTimeout } from '../utils/timeout';
+import { retry, isRetryableStatus } from '../utils/retry';
 
 const DEFAULT_VALIDATION_TIMEOUT_MS = 8000;
+const DEFAULT_VALIDATION_RETRY_ATTEMPTS = 3;
+
+const ollamaModelsCache: Record<string, { ts: number; models: string[] }> = {};
+const OLLAMA_MODELS_CACHE_TTL_MS = 30_000;
+const ENABLE_OLLAMA_MODELS_CACHE = typeof process !== 'undefined' ? process.env.NODE_ENV !== 'test' : true;
 
 export async function validateGeminiKey(key: string): Promise<{ valid: boolean; error?: string }> {
   if (!key || key.trim().length === 0) {
@@ -11,15 +17,23 @@ export async function validateGeminiKey(key: string): Promise<{ valid: boolean; 
   }
 
   try {
-    const response = await fetchWithTimeout(
-      'https://generativelanguage.googleapis.com/v1beta/models/list',
-      {
-        headers: {
-          'x-goog-api-key': key,
+    const response = await retry(async () => {
+      const res = await fetchWithTimeout(
+        'https://generativelanguage.googleapis.com/v1beta/models/list',
+        {
+          headers: {
+            'x-goog-api-key': key,
+          },
         },
-      },
-      DEFAULT_VALIDATION_TIMEOUT_MS
-    );
+        DEFAULT_VALIDATION_TIMEOUT_MS
+      );
+      if (isRetryableStatus(res.status)) {
+        const err: any = new Error(`HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res;
+    }, { maxAttempts: DEFAULT_VALIDATION_RETRY_ATTEMPTS, baseDelayMs: 400, maxDelayMs: 2500 });
 
     if (!response.ok) {
       return {
@@ -43,16 +57,24 @@ export async function validateDeepseekKey(key: string): Promise<{ valid: boolean
   }
 
   try {
-    const response = await fetchWithTimeout(
-      'https://api.deepseek.com/v1/models',
-      {
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json',
+    const response = await retry(async () => {
+      const res = await fetchWithTimeout(
+        'https://api.deepseek.com/v1/models',
+        {
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json',
+          },
         },
-      },
-      DEFAULT_VALIDATION_TIMEOUT_MS
-    );
+        DEFAULT_VALIDATION_TIMEOUT_MS
+      );
+      if (isRetryableStatus(res.status)) {
+        const err: any = new Error(`HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res;
+    }, { maxAttempts: DEFAULT_VALIDATION_RETRY_ATTEMPTS, baseDelayMs: 400, maxDelayMs: 2500 });
 
     if (!response.ok) {
       return {
@@ -73,11 +95,19 @@ export async function validateDeepseekKey(key: string): Promise<{ valid: boolean
 export async function validateOllamaConnection(url: string): Promise<{ valid: boolean; error?: string }> {
   try {
     const cleanUrl = (url || 'http://localhost:11434').replace(/\/$/, '');
-    const response = await fetchWithTimeout(
-      `${cleanUrl}/api/tags`,
-      { method: 'GET' },
-      3000
-    );
+    const response = await retry(async () => {
+      const res = await fetchWithTimeout(
+        `${cleanUrl}/api/tags`,
+        { method: 'GET' },
+        3000
+      );
+      if (isRetryableStatus(res.status)) {
+        const err: any = new Error(`HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res;
+    }, { maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1000 });
 
     if (!response.ok) {
       return { valid: false, error: 'Ollama server not responding' };
@@ -98,18 +128,38 @@ export async function validateOllamaConnection(url: string): Promise<{ valid: bo
 export async function getOllamaModels(url: string): Promise<string[]> {
   try {
     const cleanUrl = url.replace(/\/$/, '');
-    const response = await fetchWithTimeout(
-      `${cleanUrl}/api/tags`,
-      {},
-      5000
-    );
+    const now = Date.now();
+    if (ENABLE_OLLAMA_MODELS_CACHE) {
+      const cached = ollamaModelsCache[cleanUrl];
+      if (cached && now - cached.ts < OLLAMA_MODELS_CACHE_TTL_MS) {
+        return cached.models;
+      }
+    }
+
+    const response = await retry(async () => {
+      const res = await fetchWithTimeout(
+        `${cleanUrl}/api/tags`,
+        {},
+        5000
+      );
+      if (isRetryableStatus(res.status)) {
+        const err: any = new Error(`HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res;
+    }, { maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1200 });
 
     if (!response.ok) {
       return [];
     }
 
     const data = await response.json();
-    return data.models?.map((m: any) => m.name) || [];
+    const models = data.models?.map((m: any) => m.name) || [];
+    if (ENABLE_OLLAMA_MODELS_CACHE) {
+      ollamaModelsCache[cleanUrl] = { ts: now, models };
+    }
+    return models;
   } catch {
     return [];
   }

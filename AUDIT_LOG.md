@@ -4,6 +4,34 @@ Append-only session log for AI agent activity.
 
 ---
 
+## 2026-04-24 — Phase 2 resilience hardening
+
+- **SESSION_ID**: 2026-04-24-phase2-01
+- **Goal**: Implement Phase 2 resilience features (retry/backoff, Ollama safeguards, caching, storage quota UX).
+- **Actions**:
+  - added `src/services/utils/retry.ts` (exponential backoff + jitter) and integrated into providers + validation
+  - added Ollama re-validation before local critical actions (live test, battle, provider save)
+  - added Ollama model availability caching in `OllamaProvider` and `getOllamaModels` (cache disabled during tests)
+  - improved localStorage quota failure UX (history trim fallback + clearer credential-store quota error)
+- **Files touched**:
+  - `src/services/utils/retry.ts`
+  - `src/services/providers/validation.ts`
+  - `src/services/providers/deepseekProvider.ts`
+  - `src/services/providers/ollamaProvider.ts`
+  - `src/services/providers/chatgptProvider.ts`
+  - `src/services/providers/claudeProvider.ts`
+  - `src/services/providers/grokProvider.ts`
+  - `src/services/providers/geminiProvider.ts`
+  - `src/components/Wizard.tsx`
+  - `src/services/credentialStore.ts`
+  - `src/__tests__/providers/gemini.test.ts`
+- **Verification**:
+  - `npm test` -> passed
+- **Outcome**: done
+- **Next**: proceed to Phase 3 observability work.
+
+---
+
 ## 2026-04-24 — AI governance docs expansion
 
 - **Goal**: Add a system prompt file and strengthen AI onboarding orchestration.

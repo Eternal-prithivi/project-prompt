@@ -9,6 +9,7 @@
 import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { fetchWithTimeout, createTimeoutSignal } from '../utils/timeout';
+import { retry, isRetryableStatus } from '../utils/retry';
 
 type ProviderTimeoutOptions = {
   timeoutMs?: number;
@@ -18,6 +19,8 @@ export class OllamaProvider implements ILLMProvider {
   private baseUrl: string;
   private model: string;
   private timeoutMs: number;
+  private tagsCache: { ts: number; models: { name: string }[] } | null = null;
+  private tagsCacheTtlMs = 30_000;
 
   constructor(
     baseUrl: string = 'http://localhost:11434',
@@ -34,14 +37,39 @@ export class OllamaProvider implements ILLMProvider {
    * actually installed in Ollama (e.g. "deepseek-r1:7b").
    * If the name already contains a tag, or Ollama is unreachable, it is returned as-is.
    */
+  private async getTagsCached(): Promise<{ name: string }[] | null> {
+    const now = Date.now();
+    if (this.tagsCache && now - this.tagsCache.ts < this.tagsCacheTtlMs) {
+      return this.tagsCache.models;
+    }
+
+    try {
+      const res = await retry(async () => {
+        const response = await fetchWithTimeout(`${this.baseUrl}/api/tags`, {}, 5000);
+        if (!response.ok && isRetryableStatus(response.status)) {
+          const err: any = new Error(`Ollama transient HTTP ${response.status}`);
+          err.status = response.status;
+          throw err;
+        }
+        return response;
+      }, { maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1200 });
+
+      if (!res.ok) return null;
+      const data = await res.json();
+      const models = (data.models as { name: string }[] | undefined) ?? [];
+      this.tagsCache = { ts: now, models };
+      return models;
+    } catch {
+      return null;
+    }
+  }
+
   private async resolveModel(name: string): Promise<string> {
     if (name.includes(':')) return name; // already tagged
     try {
-      const res = await fetchWithTimeout(`${this.baseUrl}/api/tags`, {}, 5000); // 5s timeout for model check
-      if (!res.ok) return name;
-      const data = await res.json();
-      const match = (data.models as { name: string }[] | undefined)
-        ?.find((m) => m.name.split(':')[0] === name);
+      const models = await this.getTagsCached();
+      if (!models || models.length === 0) return name;
+      const match = models.find((m) => m.name.split(':')[0] === name);
       return match?.name ?? name;
     } catch {
       return name;
@@ -56,19 +84,27 @@ export class OllamaProvider implements ILLMProvider {
 
       // Use /api/chat (messages format) — supported by all Ollama models including llama3.x.
       // /api/generate was returning 404 for newer models like llama3.1:8b.
-      const response = await fetchWithTimeout(
-        `${this.baseUrl}/api/chat`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: resolvedModel,
-            messages: [{ role: 'user', content: prompt }],
-            stream: false,
-          }),
-        },
-        this.timeoutMs
-      );
+      const response = await retry(async () => {
+        const res = await fetchWithTimeout(
+          `${this.baseUrl}/api/chat`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: resolvedModel,
+              messages: [{ role: 'user', content: prompt }],
+              stream: false,
+            }),
+          },
+          this.timeoutMs
+        );
+        if (!res.ok && isRetryableStatus(res.status)) {
+          const err: any = new Error(`Ollama transient HTTP ${res.status}`);
+          err.status = res.status;
+          throw err;
+        }
+        return res;
+      }, { maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1500 });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');

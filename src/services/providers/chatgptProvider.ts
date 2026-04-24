@@ -10,6 +10,7 @@ import OpenAI from 'openai';
 import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { timeoutPromise } from '../utils/timeout';
+import { retry } from '../utils/retry';
 
 type ProviderTimeoutOptions = {
   timeoutMs?: number;
@@ -35,23 +36,29 @@ export class ChatGPTProvider implements ILLMProvider {
     return text.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim();
   }
 
+  private async callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return retry(fn, { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 6000 });
+  }
+
   async analyzePrompt(input: string): Promise<PromptComponents> {
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze this basic prompt and extract or suggest these components: Role, Task, Context, Format, Constraints.
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `Analyze this basic prompt and extract or suggest these components: Role, Task, Context, Format, Constraints.
     ALSO, act as a Prompt Critic. Evaluate the original prompt out of 100 on clarity, context, constraints, and tone. Provide an overall score and a brief, blunt 1-sentence feedback.
     FINALLY, generate exactly 3 highly targeted questions for the user. Answering these questions should fill in the critical missing context to make this prompt world-class.
     Basic Prompt: "${input}"`,
-          },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+            },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     const content = response.choices[0].message.content || '{}';
@@ -64,13 +71,14 @@ export class ChatGPTProvider implements ILLMProvider {
       ? `\n4. Custom: Write it specifically acting as a "${components.customPersona}".`
       : '';
 
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `Generate world-class, highly structured prompt variations based on these components:
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `Generate world-class, highly structured prompt variations based on these components:
     Role: ${components.role}
     Task: ${components.task}
     Context: ${components.context}
@@ -89,12 +97,13 @@ export class ChatGPTProvider implements ILLMProvider {
     3. Mastermind: Advanced, expert-level reasoning, complex chain-of-thought formatting (e.g., using <thinking> layers).${customInstruction}
 
     Return as JSON array.`,
-          },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+            },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     const content = response.choices[0].message.content || '[]';
@@ -103,13 +112,14 @@ export class ChatGPTProvider implements ILLMProvider {
   }
 
   async magicRefine(components: PromptComponents): Promise<PromptComponents> {
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `Act as an expert prompt engineer. Enhance and expand the missing details of this prompt structure.
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `Act as an expert prompt engineer. Enhance and expand the missing details of this prompt structure.
     Keep the good parts, improve professional quality.
     Role: ${components.role}
     Task: ${components.task}
@@ -118,12 +128,13 @@ export class ChatGPTProvider implements ILLMProvider {
     Constraints: ${components.constraints}
 
     Return as JSON.`,
-          },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+            },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     const content = response.choices[0].message.content || '{}';
@@ -136,13 +147,14 @@ export class ChatGPTProvider implements ILLMProvider {
     qas: { q: string; a: string }[]
   ): Promise<PromptComponents> {
     const qaString = qas.map((qa) => `Question: ${qa.q}\nUser Answer: ${qa.a}`).join('\n\n');
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `Act as an expert prompt engineer. You previously created this prompt structure:
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `Act as an expert prompt engineer. You previously created this prompt structure:
     Role: ${components.role}
     Task: ${components.task}
     Context: ${components.context}
@@ -154,12 +166,13 @@ export class ChatGPTProvider implements ILLMProvider {
 
     Elegantly rewrite and expand the prompt components to fully incorporate these new insights.
     Return as JSON.`,
-          },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+            },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     const content = response.choices[0].message.content || '{}';
@@ -168,63 +181,69 @@ export class ChatGPTProvider implements ILLMProvider {
   }
 
   async generateExamples(components: PromptComponents): Promise<string> {
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `Based on this prompt goal, generate 2 highly relevant 'Few-Shot' examples (Input and Expected Output formats) to help guide a language model perfectly.
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `Based on this prompt goal, generate 2 highly relevant 'Few-Shot' examples (Input and Expected Output formats) to help guide a language model perfectly.
     Task: ${components.task}
     Context: ${components.context}
     Format: ${components.format}
 
     Return ONLY the raw markdown for the examples (e.g., "### Example 1\\n**Input:** ... \\n**Output:** ..."). Do NOT include conversational filler, JSON, or any wrapper text.`,
-          },
-        ],
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+            },
+          ],
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     return response.choices[0].message.content?.trim() || '';
   }
 
   async runPrompt(promptText: string, model: string = 'gpt-4'): Promise<string> {
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: promptText,
-          },
-        ],
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: promptText,
+            },
+          ],
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     return response.choices[0].message.content || '';
   }
 
   async compressPrompt(promptText: string): Promise<string> {
-    const response = await timeoutPromise(
-      this.client.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `You are an expert prompt compression algorithm. Compress the following prompt to use the ABSOLUTE MINIMUM NUMBER OF TOKENS without losing ANY constraints, semantic meaning, or required output formats.
+    const response = await this.callWithRetry(() =>
+      timeoutPromise(
+        this.client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `You are an expert prompt compression algorithm. Compress the following prompt to use the ABSOLUTE MINIMUM NUMBER OF TOKENS without losing ANY constraints, semantic meaning, or required output formats.
     Use dense formatting (e.g. Markdown, extreme abbreviation of pleasantries, succinct lists). Maintain bracketed [VARIABLES] exactly as they are.
 
     ORIGINAL PROMPT:
     ${promptText}`,
-          },
-        ],
-      }),
-      this.timeoutMs,
-      `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+            },
+          ],
+        }),
+        this.timeoutMs,
+        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+      )
     );
 
     return response.choices[0].message.content?.trim() || promptText;
@@ -238,13 +257,14 @@ export class ChatGPTProvider implements ILLMProvider {
     outB: string
   ): Promise<JudgeVerdict> {
     try {
-      const response = await timeoutPromise(
-        this.client.chat.completions.create({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'user',
-              content: `You are an impartial, highly rigorous AI Prompt Judge. I will provide you with the overarching constraints and goals of a task, and two different pairs of (Prompt, Output).
+      const response = await this.callWithRetry(() =>
+        timeoutPromise(
+          this.client.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+              {
+                role: 'user',
+                content: `You are an impartial, highly rigorous AI Prompt Judge. I will provide you with the overarching constraints and goals of a task, and two different pairs of (Prompt, Output).
       Your goal is to evaluate which Prompt produced an output that better satisfied the requirements and achieved the highest quality formatting and tone.
 
       TASK REQUIREMENTS:
@@ -268,12 +288,13 @@ export class ChatGPTProvider implements ILLMProvider {
       ${outB}
 
       Analyze the outputs based on strict adherence to the Task Requirements. Output a JSON object with 'winner' (must be EXACTLY 'A', 'B', or 'TIE') and 'reasoning' (1 concise sentence explaining exactly why based on the rules).`,
-            },
-          ],
-          response_format: { type: 'json_object' },
-        }),
-        this.timeoutMs,
-        `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+              },
+            ],
+            response_format: { type: 'json_object' },
+          }),
+          this.timeoutMs,
+          `ChatGPT request timed out after ${Math.round(this.timeoutMs / 1000)}s`
+        )
       );
 
       const content = response.choices[0].message.content || '{}';

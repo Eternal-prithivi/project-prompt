@@ -27,6 +27,14 @@ type EncryptedPayloadV2 = {
 
 let sessionPassword: string | null = null;
 
+function isQuotaError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const anyErr = e as any;
+  const name = typeof anyErr.name === 'string' ? anyErr.name : '';
+  const message = typeof anyErr.message === 'string' ? anyErr.message : '';
+  return name === 'QuotaExceededError' || /quota/i.test(message);
+}
+
 export function setCredentialPassword(password: string): void {
   sessionPassword = password;
 }
@@ -136,6 +144,11 @@ export function saveCredentials(creds: StoredCredentials): void {
     );
   } catch (e) {
     console.error('Failed to save encrypted credentials:', e);
+    if (isQuotaError(e)) {
+      throw new Error(
+        'Credential storage failed: browser storage is full. Clear site data (or reduce saved history) and try again.'
+      );
+    }
     throw new Error(`Credential storage failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
   }
 }

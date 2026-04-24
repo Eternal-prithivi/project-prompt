@@ -12,6 +12,11 @@ Build and maintain production-ready reliability and handoff quality for Prompt A
 
 ## Completed recently
 
+- Phase 2 resilience completed:
+  - Phase 2.1: added `retry()` utility with exponential backoff + integrated into provider/validation paths
+  - Phase 2.2: added Ollama re-validation before critical local actions (tests + save provider)
+  - Phase 2.3: added Ollama model availability caching (provider + validation)
+  - Phase 2.4: improved localStorage quota failure UX (history trim + clearer credential save errors)
 - AI continuity automation (repo-level):
   - added `DECISIONS.md` (durable decisions)
   - added `SCRATCHPAD.md` (mid-task resume state)
@@ -32,10 +37,8 @@ Build and maintain production-ready reliability and handoff quality for Prompt A
 
 ## Planned next (suggested)
 
-1. Phase 2.1: rate-limit retry/backoff utility and integration
-2. Phase 2.2: Ollama re-validation before critical local actions
-3. Phase 2.3: model availability checks + cache strategy
-4. Phase 2.4: localStorage quota error UX and recovery options
+1. Phase 3: observability (structured logs, per-provider error categorization, user-visible incident hints)
+2. Phase 4: deeper UX hardening (offline-first behaviors, better recovery flows, performance tuning)
 
 ## Blockers / risks
 
