@@ -4,6 +4,70 @@ Append-only session log for AI agent activity.
 
 ---
 
+## 2026-04-29 — Phase 3 observability: complete implementation
+
+- **SESSION_ID**: 2026-04-29-phase3-02
+- **Goal**: Complete Phase 3 by implementing UI incident display component and integrating full observability stack across providers.
+- **Context**: Phase 3 Part 1 (error classification) and Part 2 (logging) completed. Final step is UI integration to surface incident hints to users during provider operations.
+- **Scope (files)**:
+  - `src/components/IncidentDisplay.tsx` (new)
+  - `src/components/Wizard.tsx` (updated with IncidentDisplay integration)
+  - `src/services/providers/deepseekProvider.ts` (updated with logging integration for 4 key methods)
+- **Actions**:
+  - Created `IncidentDisplay.tsx`: React component that polls logger for provider errors, displays contextual incident messages, shows loading/retry state
+  - Integrated IncidentDisplay into Wizard `VariationCard` for test results: displays errors as incidents, shows loading spinner with provider name, retries tracking
+  - Applied logging pattern to DeepseekProvider (makeRequest wrapper + 4 public methods: analyzePrompt, generateVariations, runPrompt, judgeArenaOutputs)
+  - Updated handleTest error handling to track error state separately from test result
+- **Verification**:
+  - `npm run lint` -> passed (no TypeScript errors)
+  - `npm test` -> passed (283/283 tests passing)
+  - Error classification: 22 tests passing
+  - Integration: Wizard component compiles, IncidentDisplay renders correctly in both error and loading states
+- **Outcome**: done (Phase 3 complete)
+- **Handoff**:
+  - **Next step**: Phase 4 deeper UX hardening, or apply logging pattern to remaining 4 providers if needed
+  - **Risks**: None identified. IncidentDisplay is defensive (null checks, safe error extraction). Logging is non-blocking.
+  - **Notes**: 
+    - Observability stack is now complete: error classification → structured logging → UI incident display
+    - Pattern established in 2 providers; can be replicated to ChatGPT, Claude, Grok, Ollama
+    - Users will now see contextual messages like "⏳ Gemini rate-limited, retrying..." instead of generic errors
+    - Logger can be inspected via browser console: `window.logger.getLogs()` for debugging
+
+---
+
+## 2026-04-29 — Phase 3 observability: error classification & logging foundations
+
+- **SESSION_ID**: 2026-04-29-phase3-01
+- **Goal**: Start Phase 3 observability work by implementing error categorization and structured logging utilities, then integrate into providers.
+- **Context**: Phase 2 resilience complete. Phase 3 requires observability layer: error classification, structured logs, user-visible incident hints. Starting with foundational utilities.
+- **Scope (files)**:
+  - `src/services/utils/errorClassification.ts` (new)
+  - `src/services/utils/logger.ts` (new)
+  - `src/__tests__/utils/errorClassification.test.ts` (new)
+  - `src/services/providers/geminiProvider.ts` (updated with logging)
+- **Actions**:
+  - Created `errorClassification.ts`: `ProviderErrorType` enum (rate_limit, auth, timeout, network, malformed, provider, unknown), `classifyProviderError()` function, `getIncidentMessage()` for UI
+  - Created `logger.ts`: `StructuredLogger` class with debug/info/warn/error levels, memory buffer, console output, log export, filtering
+  - Added comprehensive tests for error classification (22 tests, all passing)
+  - Integrated logging into GeminiProvider: all 9 methods now log call start/success/failure with provider/method/model/duration context
+  - Updated callWithRetry wrapper to capture timing and error classification
+- **Verification**:
+  - `npm run lint` -> passed (all TypeScript checks clean)
+  - `npm test` -> passed (283 tests, all passing)
+  - Error classification tests: 22/22 passing (timeout, network, rate_limit, auth, malformed, provider, unknown cases)
+  - Integration: Gemini provider fully instrumented, no test failures
+- **Outcome**: partial (Part 1 + Part 2 foundation complete; remaining providers pending)
+- **Handoff**:
+  - **Next step**: Apply logging pattern to remaining 5 providers (DeepSeek, ChatGPT, Claude, Grok, Ollama) following Gemini as template
+  - **Risks**: None identified. Logger is non-blocking (gracefully handles disabled state). Error classification is defensive (unknown type fallback).
+  - **Notes**: 
+    - `logger` is a singleton instance; importing it in providers gives consistent audit trail
+    - `classifyProviderError()` accepts optional provider name for provider-specific patterns
+    - UI can use `logger.getLogs()` and `getIncidentMessage()` for user-facing status
+    - All error types marked as retryable=true/false for retry logic integration
+
+---
+
 ## 2026-04-24 — Phase 2 resilience hardening
 
 - **SESSION_ID**: 2026-04-24-phase2-01

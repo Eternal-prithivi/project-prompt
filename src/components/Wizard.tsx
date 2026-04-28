@@ -10,6 +10,7 @@ import { getCredentials, saveCredentials, credentialsToConfig, StoredCredentials
 import { validateGeminiKey, validateDeepseekKey, validateOllamaConnection, getOllamaModels } from '../services/providers/validation';
 import { ProviderConfig } from '../services/types/ILLMProvider';
 import { safeErrorMessage } from '../services/utils/errors';
+import { IncidentDisplay } from './IncidentDisplay';
 import { OllamaSetupModal } from './OllamaSetupModal';
 import { ModelGallery } from './ModelGallery';
 import { getSystemInfo } from '../services/systemInfo';
@@ -54,6 +55,7 @@ const VariationCard: React.FC<{
 }) => {
   const [varValues, setVarValues] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [testError, setTestError] = useState<Error | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -143,6 +145,7 @@ const VariationCard: React.FC<{
 
   const handleTest = async () => {
     setIsTesting(true);
+    setTestError(null);
     setTestResult(`Connecting to ${testModel}...`);
     try {
       if (selectedEngine === 'local') {
@@ -152,9 +155,15 @@ const VariationCard: React.FC<{
         }
       }
       const res = await runPrompt(resolvedContent, testModel);
-      if (isMountedRef.current) setTestResult(res);
+      if (isMountedRef.current) {
+        setTestResult(res);
+        setTestError(null);
+      }
     } catch(e: any) {
-      if (isMountedRef.current) setTestResult("Error: " + safeErrorMessage(e));
+      if (isMountedRef.current) {
+        setTestError(e);
+        setTestResult(null);
+      }
     } finally {
       if (isMountedRef.current) setIsTesting(false);
     }
@@ -318,10 +327,23 @@ const VariationCard: React.FC<{
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/10 overflow-hidden shadow-emerald-500/5 shadow-2xl">
                 <div className="px-4 py-3 bg-emerald-500/10 border-b border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
                   <h4 className="flex items-center gap-2 text-emerald-400 font-mono text-xs uppercase tracking-widest"><Terminal className="w-4 h-4"/> Playground Out ({getEngineLabel()})</h4>
-                  {isTesting ? <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin"/> : <Button variant="ghost" size="sm" onClick={()=>setTestResult(null)} className="h-6 px-2 text-xs text-emerald-400/50 hover:text-emerald-400">CLEAR</Button>}
+                  {isTesting ? <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin"/> : <Button variant="ghost" size="sm" onClick={()=>{setTestResult(null); setTestError(null);}} className="h-6 px-2 text-xs text-emerald-400/50 hover:text-emerald-400">CLEAR</Button>}
                 </div>
                 <div className="p-6 font-sans text-sm text-emerald-50 leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto">
-                  {isTesting && !testResult?.includes("Error") ? <span className="animate-pulse text-emerald-400/50">Processing via {testModel}...</span> : testResult}
+                  {testError ? (
+                    <IncidentDisplay
+                      provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+                      error={testError}
+                      onClose={() => setTestError(null)}
+                    />
+                  ) : isTesting && !testResult?.includes("Error") ? (
+                    <IncidentDisplay
+                      provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+                      isLoading={true}
+                    />
+                  ) : (
+                    testResult
+                  )}
                 </div>
             </div>
           )}

@@ -10,6 +10,8 @@ import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { fetchWithTimeout } from '../utils/timeout';
 import { retry, isRetryableStatus } from '../utils/retry';
+import { logger } from '../utils/logger';
+import { classifyProviderError } from '../utils/errorClassification';
 
 type ProviderTimeoutOptions = {
   timeoutMs?: number;
@@ -32,13 +34,37 @@ export class DeepseekProvider implements ILLMProvider {
     endpoint: string,
     messages: any[],
     model: string = 'deepseek-chat',
-    timeoutMs?: number
+    timeoutMs?: number,
+    methodName: string = 'unknown'
   ): Promise<string> {
-    const doFetch = async () => {
-      const response = timeoutMs != null
-        ? await fetchWithTimeout(
-            `${this.baseUrl}${endpoint}`,
-            {
+    const startTime = Date.now();
+    logger.debug('provider.call.start', {
+      provider: 'deepseek',
+      method: methodName,
+      model,
+    });
+
+    try {
+      const doFetch = async () => {
+        const response = timeoutMs != null
+          ? await fetchWithTimeout(
+              `${this.baseUrl}${endpoint}`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${this.apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model,
+                  messages,
+                  response_format: { type: 'json_object' },
+                  temperature: 1,
+                }),
+              },
+              timeoutMs
+            )
+          : await fetch(`${this.baseUrl}${endpoint}`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${this.apiKey}`,
@@ -50,51 +76,62 @@ export class DeepseekProvider implements ILLMProvider {
                 response_format: { type: 'json_object' },
                 temperature: 1,
               }),
-            },
-            timeoutMs
-          )
-        : await fetch(`${this.baseUrl}${endpoint}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model,
-              messages,
-              response_format: { type: 'json_object' },
-              temperature: 1,
-            }),
-          });
+            });
 
-      // Retry transient HTTP statuses (429/5xx/etc). Don't retry auth errors.
-      if (!response.ok && isRetryableStatus(response.status)) {
-        const err: any = new Error(`DeepSeek transient HTTP ${response.status}`);
-        err.status = response.status;
-        throw err;
+        // Retry transient HTTP statuses (429/5xx/etc). Don't retry auth errors.
+        if (!response.ok && isRetryableStatus(response.status)) {
+          const err: any = new Error(`DeepSeek transient HTTP ${response.status}`);
+          err.status = response.status;
+          throw err;
+        }
+
+        return response;
+      };
+
+      let response: Response;
+      try {
+        response = await retry(doFetch, { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 6000 });
+      } catch (e: any) {
+        const status = typeof e?.status === 'number' ? e.status : undefined;
+        if (status != null) {
+          throw new Error(`DeepSeek API error (${status}): transient failure`);
+        }
+        throw e;
       }
 
-      return response;
-    };
-
-    let response: Response;
-    try {
-      response = await retry(doFetch, { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 6000 });
-    } catch (e: any) {
-      const status = typeof e?.status === 'number' ? e.status : undefined;
-      if (status != null) {
-        throw new Error(`DeepSeek API error (${status}): transient failure`);
+      if (!response.ok) {
+        const error = typeof (response as any).text === 'function' ? await response.text() : '';
+        throw new Error(`DeepSeek API error (${response.status}): ${error}`);
       }
-      throw e;
-    }
 
-    if (!response.ok) {
-      const error = typeof (response as any).text === 'function' ? await response.text() : '';
-      throw new Error(`DeepSeek API error (${response.status}): ${error}`);
-    }
+      const data = await response.json();
+      const result = data.choices[0]?.message?.content || '';
+      const duration = Date.now() - startTime;
 
-    const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+      logger.info('provider.call.success', {
+        provider: 'deepseek',
+        method: methodName,
+        model,
+        data: { durationMs: duration },
+      });
+
+      return result;
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      const classified = classifyProviderError(error, 'deepseek');
+      logger.error('provider.call.failure', {
+        provider: 'deepseek',
+        method: methodName,
+        model,
+        message: classified.message,
+        data: {
+          durationMs: duration,
+          errorType: classified.type,
+          isRetryable: classified.isRetryable,
+        },
+      });
+      throw error;
+    }
   }
 
   private cleanJSON(text: string): string {
@@ -111,17 +148,23 @@ export class DeepseekProvider implements ILLMProvider {
   }
 
   async analyzePrompt(input: string): Promise<PromptComponents> {
-    const response = await this.makeRequest('/chat/completions', [
-      {
-        role: 'user',
-        content: `Analyze this basic prompt and extract components: Role, Task, Context, Format, Constraints.
+    const response = await this.makeRequest(
+      '/chat/completions',
+      [
+        {
+          role: 'user',
+          content: `Analyze this basic prompt and extract components: Role, Task, Context, Format, Constraints.
 Score the original prompt out of 100 on clarity, context, constraints, tone.
 Generate exactly 3 questions the user should answer.
 Return as JSON.
 
 Prompt: "${input}"`,
-      },
-    ], 'deepseek-chat', this.timeoutMs);
+        },
+      ],
+      'deepseek-chat',
+      this.timeoutMs,
+      'analyzePrompt'
+    );
 
     const parsed = this.parseJSON<PromptComponents>(response || '{}', {} as any);
     return { ...(parsed || ({} as any)), customPersona: '' };
@@ -132,10 +175,12 @@ Prompt: "${input}"`,
       ? `\n4. Custom: Write it as a "${components.customPersona}".`
       : '';
 
-    const response = await this.makeRequest('/chat/completions', [
-      {
-        role: 'user',
-        content: `Generate 3 prompt variations:
+    const response = await this.makeRequest(
+      '/chat/completions',
+      [
+        {
+          role: 'user',
+          content: `Generate 3 prompt variations:
 Role: ${components.role}
 Task: ${components.task}
 Context: ${components.context}
@@ -144,8 +189,12 @@ Constraints: ${components.constraints}
 
 Return as JSON array with: id, type, title, description, content
 Include variables like [UPPERCASE_WORD]${customInstruction}`,
-      },
-    ], 'deepseek-chat', this.timeoutMs);
+        },
+      ],
+      'deepseek-chat',
+      this.timeoutMs,
+      'generateVariations'
+    );
 
     const variations = this.parseJSON<any[]>(response || '[]', []);
     return variations.map((v, i) => ({ ...v, id: String(i) })) as PromptVariation[];
@@ -214,9 +263,13 @@ Return as markdown: ### Example 1\\n**Input:** ...\\n**Output:** ...`,
   }
 
   async runPrompt(promptText: string, model: string = 'deepseek-chat'): Promise<string> {
-    const response = await this.makeRequest('/chat/completions', [
-      { role: 'user', content: promptText },
-    ], model, this.timeoutMs);
+    const response = await this.makeRequest(
+      '/chat/completions',
+      [{ role: 'user', content: promptText }],
+      model,
+      this.timeoutMs,
+      'runPrompt'
+    );
 
     return response;
   }
@@ -248,10 +301,12 @@ Return only the compressed prompt, no explanation.`,
     outB: string
   ): Promise<JudgeVerdict> {
     try {
-      const response = await this.makeRequest('/chat/completions', [
-        {
-          role: 'user',
-          content: `Judge which prompt is better:
+      const response = await this.makeRequest(
+        '/chat/completions',
+        [
+          {
+            role: 'user',
+            content: `Judge which prompt is better:
 
 REQUIREMENTS:
 Role: ${components.role}
@@ -269,8 +324,12 @@ Prompt: ${promptB}
 Output: ${outB}
 
 Return JSON: { "winner": "A" or "B" or "TIE", "reasoning": "..." }`,
-        },
-      ], 'deepseek-chat', this.timeoutMs);
+          },
+        ],
+        'deepseek-chat',
+        this.timeoutMs,
+        'judgeArenaOutputs'
+      );
 
       const parsed = JSON.parse(this.cleanJSON(response || '{}'));
       return {
@@ -278,6 +337,10 @@ Return JSON: { "winner": "A" or "B" or "TIE", "reasoning": "..." }`,
         reasoning: parsed.reasoning || 'No reasoning provided.',
       };
     } catch (e: any) {
+      logger.error('judge.arena.failure', {
+        provider: 'deepseek',
+        message: e?.message || 'Unknown judge error',
+      });
       return { winner: 'TIE', reasoning: 'Judge error: ' + (e?.message || 'Unknown error') };
     }
   }
