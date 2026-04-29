@@ -334,7 +334,18 @@ const VariationCard: React.FC<{
                     <IncidentDisplay
                       provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
                       error={testError}
-                      onClose={() => setTestError(null)}
+                      showActions={true}
+                      context="test"
+                      onRetry={handleTest}
+                      onSwitchModel={(model) => {
+                        setTestModel(model);
+                        setTimeout(() => handleTest(), 100);
+                      }}
+                      availableModels={getAvailableModels()}
+                      onClose={() => {
+                        setTestError(null);
+                        setTestResult(null);
+                      }}
                     />
                   ) : isTesting && !testResult?.includes("Error") ? (
                     <IncidentDisplay

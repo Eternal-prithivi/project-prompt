@@ -10,27 +10,46 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, Zap, Loader } from 'lucide-react';
 import { logger, LogEntry, LogLevel } from '../services/utils/logger';
-import { getIncidentMessage, ProviderErrorType } from '../services/utils/errorClassification';
+import { getIncidentMessage, ProviderErrorType, classifyProviderError } from '../services/utils/errorClassification';
+import { RecoveryActions } from './RecoveryActions';
 
 export interface IncidentDisplayProps {
   provider?: string;
   isLoading?: boolean;
   error?: Error | null;
   onClose?: () => void;
+  onRetry?: () => void;
+  onSwitchProvider?: (provider: string) => void;
+  onSwitchModel?: (model: string) => void;
+  onOpenSettings?: () => void;
+  showActions?: boolean;
+  context?: 'test' | 'analyze' | 'variations' | 'battle' | 'refine' | 'init';
+  availableProviders?: string[];
+  availableModels?: string[];
 }
 
 /**
  * Display incident hints during provider operations
  * Shows status like: "⏳ Gemini rate-limited, retrying in 2s..."
+ * Optionally shows recovery action buttons
  */
 export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
   provider,
   isLoading = false,
   error = null,
   onClose,
+  onRetry,
+  onSwitchProvider,
+  onSwitchModel,
+  onOpenSettings,
+  showActions = false,
+  context = 'test',
+  availableProviders = [],
+  availableModels = [],
 }) => {
   const [recentLogs, setRecentLogs] = useState<LogEntry[]>([]);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [errorType, setErrorType] = useState<ProviderErrorType>(ProviderErrorType.UNKNOWN);
 
   useEffect(() => {
     if (!provider) return;
@@ -46,6 +65,10 @@ export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
           setIsRetrying(true);
           setTimeout(() => setIsRetrying(false), 2000);
         }
+        // Extract error type from logs
+        if (latest?.data?.errorType) {
+          setErrorType(latest.data.errorType);
+        }
       }
     }, 500);
 
@@ -55,13 +78,13 @@ export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
   // If error provided, show incident message for it
   if (error && provider) {
     let incidentMsg = `Error: ${error.message}`;
+    let classifiedErrorType = ProviderErrorType.UNKNOWN;
+
     try {
-      // Try to extract error type from logs
-      const logs = logger.getProviderErrors(provider, 1);
-      if (logs.length > 0 && logs[0]?.data?.errorType) {
-        const errorType = logs[0].data.errorType;
-        incidentMsg = getIncidentMessageForType(errorType, provider);
-      }
+      // Classify the error
+      const classified = classifyProviderError(error, provider);
+      classifiedErrorType = classified.type as ProviderErrorType;
+      incidentMsg = getIncidentMessageForType(classifiedErrorType, provider);
     } catch {
       // Fall back to error message
     }
@@ -71,14 +94,30 @@ export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
-        className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-start gap-2"
+        className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex flex-col gap-2"
       >
-        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-        <div className="flex-1 text-sm text-red-300">{incidentMsg}</div>
-        {onClose && (
-          <button onClick={onClose} className="text-red-400 hover:text-red-300 flex-shrink-0">
-            ✕
-          </button>
+        <div className="flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm text-red-300">{incidentMsg}</div>
+          {onClose && (
+            <button onClick={onClose} className="text-red-400 hover:text-red-300 flex-shrink-0">
+              ✕
+            </button>
+          )}
+        </div>
+        {showActions && onRetry && (
+          <RecoveryActions
+            error={error}
+            errorType={classifiedErrorType}
+            provider={provider}
+            context={context}
+            onRetry={onRetry}
+            onSwitchProvider={onSwitchProvider}
+            onSwitchModel={onSwitchModel}
+            onOpenSettings={onOpenSettings}
+            availableProviders={availableProviders}
+            availableModels={availableModels}
+          />
         )}
       </motion.div>
     );
@@ -122,10 +161,10 @@ export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
 /**
  * Get user-friendly incident message for error type
  */
-function getIncidentMessageForType(errorType: string, provider: string): string {
+function getIncidentMessageForType(errorType: ProviderErrorType, provider: string): string {
   const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 
-  const messages: Record<string, string> = {
+  const messages: Record<ProviderErrorType, string> = {
     [ProviderErrorType.RATE_LIMIT]: `⏳ ${providerName} rate-limited. Backing off...`,
     [ProviderErrorType.AUTH]: `❌ ${providerName} auth failed. Check your API key.`,
     [ProviderErrorType.TIMEOUT]: `⏱️ ${providerName} request timed out. Retrying...`,
