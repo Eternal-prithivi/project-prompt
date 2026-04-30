@@ -8,7 +8,10 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## In progress
 
-- None
+- **Phase 4.2: Recovery Flows - Remaining Error Points** (50%)
+  - Added error tracking for main analysis flow
+  - Integrated recovery actions to analysis error display
+  - TODO: Add to variations, battle, refine, init error points
 
 ## Completed recently
 
@@ -25,7 +28,7 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Planned next (suggested)
 
-1. Phase 4.2: Add recovery flows to remaining 5 error points (analyze, variations, battle, refine, init)
+1. Phase 4.2 (continue): Add recovery flows to variations, battle, refine, init error points
 2. Phase 4.3: State preservation on errors (sessionStorage for transient state)
 3. Phase 5: Offline-first behaviors (offline mode detection, local-only fallback)
 4. Phase 6: Performance tuning (response caching, lazy loading, bundle optimization)
@@ -36,7 +39,7 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Next agent handoff
 
-- Phase 4.1 complete with recovery flows at test point. Pattern established for remaining points.
-- RecoveryActions component is reusable; can be added to other error points via copy/paste pattern
+- Phase 4.2 in progress - recovery actions added to analysis + test points, pattern can be replicated to 4 remaining error points
+- RecoveryActions component is reusable and ready for all error contexts
 - Follow `AI_MASTER.md` process for all future work
 

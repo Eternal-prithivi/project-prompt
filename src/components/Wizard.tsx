@@ -370,6 +370,7 @@ export const Wizard = () => {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<Error | null>(null);
 
   // Provider management
   const [credentials, setCredentials] = useState<StoredCredentials>(getCredentials());
@@ -610,12 +611,15 @@ export const Wizard = () => {
 
   const handleStartAnalysis = async () => {
     if (!initialInput.trim()) return;
-    setLoading(true); setErrorMsg(null);
+    setLoading(true);
+    setErrorMsg(null);
+    setAnalysisError(null);
     try {
       const analyzed = await analyzePrompt(initialInput);
       setComponents(analyzed);
       setStep('refining');
     } catch (error: any) {
+      setAnalysisError(error);
       setErrorMsg(error?.message || 'Failed to analyze prompt. Please try again.');
     } finally {
       setLoading(false);
@@ -1225,7 +1229,23 @@ export const Wizard = () => {
                     </div>
                   </div>
                 </Card>
-                {errorMsg && <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm font-mono text-center shadow-lg shadow-red-500/10">{errorMsg}</div>}
+                {analysisError ? (
+                  <IncidentDisplay
+                    provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+                    error={analysisError}
+                    showActions={true}
+                    context="analyze"
+                    onRetry={handleStartAnalysis}
+                    onClose={() => {
+                      setAnalysisError(null);
+                      setErrorMsg(null);
+                    }}
+                  />
+                ) : errorMsg && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm font-mono text-center shadow-lg shadow-red-500/10">
+                    {errorMsg}
+                  </div>
+                )}
               </motion.div>
             )}
 
