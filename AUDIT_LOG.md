@@ -253,3 +253,38 @@ Use this template for all future sessions:
     - Pattern is extensible; can be applied to remaining 2 error points (init, refine) in ~15 minutes each
 
 ---
+## 2026-04-30 — Phase 4.4: Recovery Flows for Init & Refine Errors
+
+- **SESSION_ID**: 2026-04-30-phase4-04
+- **Goal**: Complete Phase 4 reliability hardening by adding recovery flows to the remaining 2 error points (provider initialization and magic refine).
+- **Context**: Phase 4.3 added state preservation. Phase 4.4 completes the recovery flows for all major error points. With this, all 6 major user-facing errors now have recovery actions and state preservation.
+- **Scope (files)**:
+  - `src/components/Wizard.tsx` (7 integration points for init/refine error capture and recovery UI)
+- **Actions**:
+  - Added `initError` and `refineError` state variables to Wizard component
+  - Integrated error capture at 4 provider initialization contexts:
+    - Mount effect initialization
+    - Unlock credentials flow
+    - Settings save/provider change
+    - Model gallery selection
+  - Integrated error capture and state preservation in `handleMagicRefine`
+  - Created `handleRetryInitialization` recovery callback
+  - Added IncidentDisplay for init errors in initial step
+  - Added IncidentDisplay for refine errors in refining step
+  - Both recovery flows provide contextual retry buttons and user guidance
+- **Verification**:
+  - `npm run lint` → passed (no TypeScript errors)
+  - `npm test` → passed (315/315 tests, all passing)
+  - Manual validation: init errors display recovery UI, refine errors display recovery UI
+- **Outcome**: done (Phase 4.4 complete, all 6/6 major error points now have recovery)
+- **Handoff**:
+  - **Next step**: Phase 5 (offline-first behaviors) or Phase 6 (performance tuning)
+  - **Risks**: None identified. Recovery paths are defensive (null checks, error classification).
+  - **Notes**: 
+    - Phase 4 (reliability hardening) is now complete with all 6 major error points covered
+    - Total error recovery coverage: init, refine, analyze, variations, test, battle
+    - State preservation applies to analysis, variations, refine, and battle errors
+    - Users can recover from any workflow error without restart or data loss
+    - All tests passing, lint clean, ready for next phase
+
+---

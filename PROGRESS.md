@@ -8,13 +8,25 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## In progress
 
-- **Phase 4.3: State Preservation on Errors** 🔄 IN PROGRESS
-  - Completed: Created statePreservation utility module
-  - Completed: Integrated state save/restore at all error recovery points
-  - Completed: Added comprehensive test coverage (15 new tests)
-  - Next: Verify user testing and user feedback on recovered state usability
+- **Phase 4.4: Recovery Flows for Init & Refine** 🔄 IN PROGRESS
+  - Completed: Added initError and refineError state variables
+  - Completed: Integrated error capture at provider init and magic refine points
+  - Completed: Added IncidentDisplay with recovery actions for both error types
+  - Completed: Added state preservation for refine errors
+  - Next: Complete session documentation
 
 ## Completed recently
+
+- **Phase 4.4: Recovery Flows for Init & Refine Errors** ✅ COMPLETE
+  - Added `initError` and `refineError` state variables for tracking these errors
+  - Integrated error capture at provider initialization (mount, unlock, settings save, model select)
+  - Integrated error capture for magic refine operation with state preservation
+  - Added IncidentDisplay components with recovery actions in both initial and refining steps
+  - Init errors now show retry button with `handleRetryInitialization` callback
+  - Refine errors now show retry button with `handleMagicRefine` callback + preserved state
+  - State preservation on refine error maintains components, interviewAnswers, selectedEngine, step
+  - All 6/6 major error points now have recovery flows (init, refine, analyze, variations, test, battle)
+  - All tests passing (315/315), lint clean
 
 - **Phase 4.3: State Preservation on Errors** ✅ COMPLETE
   - Created `statePreservation.ts` utility module with save/restore/clear/check functions
@@ -46,9 +58,9 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Planned next (suggested)
 
-1. Phase 4.4: Add recovery to remaining 2 error points (refine, init) — optional edge cases
-2. Phase 5: Offline-first behaviors (offline mode detection, local-only fallback)
-3. Phase 6: Performance tuning (response caching, lazy loading, bundle optimization)
+1. Phase 5: Offline-first behaviors (offline mode detection, local-only fallback)
+2. Phase 6: Performance tuning (response caching, lazy loading, bundle optimization)
+3. Phase 7: Advanced analytics and telemetry (optional future)
 
 ## Blockers / risks
 
@@ -56,10 +68,13 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Next agent handoff
 
-- Phase 4.3 complete with state preservation utility and integration at all error recovery points
-- Users can now recover from errors without losing their progress (state is preserved in sessionStorage)
-- State expires after 1 hour or can be cleared explicitly
-- 315 tests passing (15 new tests for state preservation)
-- Ready for Phase 4.4 (remaining 2 error points) or Phase 5 (offline-first)
+- Phase 4 (reliability hardening) now complete with all 6 major error points covered:
+  - Phase 4.1: Foundation (RecoveryActions component)
+  - Phase 4.2: Recovery flows at 4 error points (analysis, variations, test, battle)
+  - Phase 4.3: State preservation via sessionStorage
+  - Phase 4.4: Recovery flows at remaining 2 error points (init, refine)
+- Users can now recover from any error without manual restart or re-entry
+- All error recovery paths support retry, provider switching, and model switching
+- 315 tests passing, lint clean, ready for Phase 5
 - Follow `AI_MASTER.md` process for all future work
 

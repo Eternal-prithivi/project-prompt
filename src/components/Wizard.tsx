@@ -373,6 +373,8 @@ export const Wizard = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<Error | null>(null);
   const [variationsError, setVariationsError] = useState<Error | null>(null);
+  const [initError, setInitError] = useState<Error | null>(null);
+  const [refineError, setRefineError] = useState<Error | null>(null);
 
   // Provider management
   const [credentials, setCredentials] = useState<StoredCredentials>(getCredentials());
@@ -430,6 +432,7 @@ export const Wizard = () => {
       initializeProvider(config);
     } catch (e: any) {
       console.warn('Provider initialization warning:', safeErrorMessage(e));
+      setInitError(e);
       setErrorMsg(`Provider initialization failed: ${safeErrorMessage(e)}`);
     }
 
@@ -463,6 +466,7 @@ export const Wizard = () => {
   const handleUnlockCredentials = () => {
     try {
       setErrorMsg(null);
+      setInitError(null);
       const unlocked = unlockCredentials(credentialPassword);
       setCredentials(unlocked);
       setIsCredsLocked(false);
@@ -470,6 +474,7 @@ export const Wizard = () => {
       initializeProvider(config);
       setErrorMsg(null);
     } catch (e: any) {
+      setInitError(e);
       setErrorMsg(`Unlock failed: ${safeErrorMessage(e)}`);
     }
   };
@@ -594,6 +599,7 @@ export const Wizard = () => {
       setIsSettingsOpen(false);
       setErrorMsg(null);
     } catch (e: any) {
+      setInitError(e);
       setErrorMsg('Failed to save provider: ' + safeErrorMessage(e));
     }
   };
@@ -652,14 +658,39 @@ export const Wizard = () => {
   };
 
   const handleMagicRefine = async () => {
-    setActionLoading('refine'); setErrorMsg(null);
+    setActionLoading('refine');
+    setErrorMsg(null);
+    setRefineError(null);
     try {
       const refined = await magicRefine(components);
       setComponents(refined);
+      // Clear preserved state on success
+      clearPreservedState();
     } catch (e: any) {
+      setRefineError(e);
       setErrorMsg("Magic refine failed: " + safeErrorMessage(e));
+      // Preserve state for recovery
+      savePreservedState({
+        components,
+        interviewAnswers,
+        selectedEngine,
+        step: 'refining',
+      });
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleRetryInitialization = async () => {
+    setInitError(null);
+    setErrorMsg(null);
+    try {
+      const creds = getCredentials();
+      const config = credentialsToConfig(creds);
+      initializeProvider(config);
+    } catch (e: any) {
+      setInitError(e);
+      setErrorMsg(`Provider initialization failed: ${safeErrorMessage(e)}`);
     }
   };
 
@@ -996,6 +1027,7 @@ export const Wizard = () => {
             setCredentials(newCreds);
             setIsModelGalleryOpen(false);
           } catch (e: any) {
+            setInitError(e);
             setErrorMsg(`Failed to apply model: ${safeErrorMessage(e)}`);
           }
         }}
@@ -1300,7 +1332,19 @@ export const Wizard = () => {
                     </div>
                   </div>
                 </Card>
-                {analysisError ? (
+                {initError ? (
+                  <IncidentDisplay
+                    provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+                    error={initError}
+                    showActions={true}
+                    context="init"
+                    onRetry={handleRetryInitialization}
+                    onClose={() => {
+                      setInitError(null);
+                      setErrorMsg(null);
+                    }}
+                  />
+                ) : analysisError ? (
                   <IncidentDisplay
                     provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
                     error={analysisError}
@@ -1337,6 +1381,25 @@ export const Wizard = () => {
                     </Button>
                   </div>
                 </div>
+
+                {refineError ? (
+                  <IncidentDisplay
+                    provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+                    error={refineError}
+                    showActions={true}
+                    context="refine"
+                    onRetry={handleMagicRefine}
+                    onClose={() => {
+                      setRefineError(null);
+                      setErrorMsg(null);
+                      clearPreservedState();
+                    }}
+                  />
+                ) : errorMsg && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm font-mono text-center shadow-lg shadow-red-500/10">
+                    {errorMsg}
+                  </div>
+                )}
 
                 {components.scores && (
                   <div className="bg-black/40 p-6 rounded-2xl border border-white/5 shadow-2xl">
