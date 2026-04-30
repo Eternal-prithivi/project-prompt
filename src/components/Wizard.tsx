@@ -371,6 +371,7 @@ export const Wizard = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<Error | null>(null);
+  const [variationsError, setVariationsError] = useState<Error | null>(null);
 
   // Provider management
   const [credentials, setCredentials] = useState<StoredCredentials>(getCredentials());
@@ -685,13 +686,16 @@ export const Wizard = () => {
   };
 
   const handleGenerateVariations = async () => {
-    setLoading(true); setErrorMsg(null);
+    setLoading(true);
+    setErrorMsg(null);
+    setVariationsError(null);
     try {
       const generated = await generateVariations(components);
       setResults(generated);
       saveToHistory(generated);
       setStep('results');
     } catch (error: any) {
+      setVariationsError(error);
       setErrorMsg(error?.message || 'Failed to generate variations. Please try again.');
     } finally {
       setLoading(false);
@@ -1327,7 +1331,23 @@ export const Wizard = () => {
                       <Input value={components.customPersona || ''} onChange={(e) => setComponents({ ...components, customPersona: e.target.value })} placeholder="e.g., Cynical Technical Writer, Pirate, CEO" className="bg-black/40 border-fuchsia-500/30 focus:border-fuchsia-400" />
                     </div>
                     <div className="pt-6 space-y-4">
-                      {errorMsg && <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm text-center">{errorMsg}</div>}
+                      {variationsError ? (
+                        <IncidentDisplay
+                          provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+                          error={variationsError}
+                          showActions={true}
+                          context="variations"
+                          onRetry={handleGenerateVariations}
+                          onClose={() => {
+                            setVariationsError(null);
+                            setErrorMsg(null);
+                          }}
+                        />
+                      ) : errorMsg && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm text-center">
+                          {errorMsg}
+                        </div>
+                      )}
                       <Button variant="primary" className="w-full h-16 text-lg gap-3" onClick={handleGenerateVariations} disabled={loading}>
                         {loading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <>Forge Final Prompts <ArrowRight className="w-6 h-6" /></>}
                       </Button>
