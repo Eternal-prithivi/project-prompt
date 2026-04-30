@@ -13,6 +13,7 @@ import { safeErrorMessage } from '../services/utils/errors';
 import { IncidentDisplay } from './IncidentDisplay';
 import { OllamaSetupModal } from './OllamaSetupModal';
 import { ModelGallery } from './ModelGallery';
+import { CompressionServiceModal } from './CompressionServiceModal';
 import { getSystemInfo } from '../services/systemInfo';
 import { savePreservedState, getPreservedState, clearPreservedState, hasPreservedState, restorePreservedState } from '../services/utils/statePreservation';
 
@@ -415,6 +416,9 @@ export const Wizard = () => {
   const [isOllamaSetupOpen, setIsOllamaSetupOpen] = useState(false);
   const [isModelGalleryOpen, setIsModelGalleryOpen] = useState(false);
   const [suggestedModel, setSuggestedModel] = useState<string>('');
+
+  // Compression Service Modal state
+  const [isCompressionServiceOpen, setIsCompressionServiceOpen] = useState(false);
 
   // Initialize provider on mount
   useEffect(() => {
@@ -1033,6 +1037,12 @@ export const Wizard = () => {
         }}
       />
 
+      {/* Compression Service Modal */}
+      <CompressionServiceModal
+        isOpen={isCompressionServiceOpen}
+        onClose={() => setIsCompressionServiceOpen(false)}
+      />
+
       {/* Settings Overlay */}
       <AnimatePresence>
         {isSettingsOpen && (
@@ -1308,6 +1318,9 @@ export const Wizard = () => {
              <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(true)} className="gap-2 font-mono text-white/50 hover:text-white border border-transparent hover:border-white/10">
                <Settings2 className="w-4 h-4" /> <span className="hidden md:inline">SETTINGS</span>
              </Button>
+            <Button variant="ghost" size="sm" onClick={() => setIsCompressionServiceOpen(true)} className="gap-2 font-mono text-cyan-400/70 hover:text-cyan-300 border border-transparent hover:border-cyan-400/20">
+              <Minimize2 className="w-4 h-4" /> <span className="hidden md:inline">COMPRESS</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="gap-2 font-mono">
               <Library className="w-4 h-4"/> <span className="hidden md:inline">LIBRARY</span>
             </Button>
