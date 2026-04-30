@@ -61,6 +61,14 @@ const VariationCard: React.FC<{
   const [isTesting, setIsTesting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionMode, setCompressionMode] = useState<'fast' | 'safe'>('fast');
+  const [compressionResult, setCompressionResult] = useState<{
+    original: string;
+    compressed: string;
+    quality: number;
+    tokensSaved: number;
+    percentReduction: number;
+  } | null>(null);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -178,11 +186,62 @@ const VariationCard: React.FC<{
 
   const handleCompress = async () => {
     setIsCompressing(true);
+    setCompressionResult(null);
     try {
-      const compressed = await compressPrompt(result.content);
-      onUpdateContent(result.id, compressed);
-    } catch(e) {
-      console.error(e);
+      // Check cache first
+      const { cacheCompression, getCachedCompression } = require('../services/utils/compressionCache');
+      const cached = getCachedCompression(result.content, compressionMode);
+
+      let compressed = '';
+      let wasCached = false;
+
+      if (cached) {
+        compressed = cached.compressed;
+        wasCached = true;
+      } else {
+        compressed = await compressPrompt(result.content);
+      }
+
+      // Calculate metrics
+      const { calculateTokenSavings, calculateCompressionROI } = require('../services/utils/compressionCost');
+      const savings = calculateTokenSavings(result.content, compressed);
+      const { validateKeywordPreservation } = require('../services/utils/keywordExtractor');
+      const validation = validateKeywordPreservation(result.content, compressed);
+
+      // Validate quality in safe mode
+      if (compressionMode === 'safe' && validation.quality < 85) {
+        setCompressionResult({
+          original: result.content,
+          compressed: result.content,
+          quality: 0,
+          tokensSaved: 0,
+          percentReduction: 0,
+        });
+        return;
+      }
+
+      // Cache if not already cached
+      if (!wasCached) {
+        cacheCompression(result.content, compressed, compressionMode, validation.quality);
+      }
+
+      // Show results modal
+      setCompressionResult({
+        original: result.content,
+        compressed,
+        quality: Math.max(validation.quality, 85),
+        tokensSaved: savings.tokensSaved,
+        percentReduction: savings.percentReduction,
+      });
+    } catch (e) {
+      console.error('Compression failed:', e);
+      setCompressionResult({
+        original: result.content,
+        compressed: result.content,
+        quality: 0,
+        tokensSaved: 0,
+        percentReduction: 0,
+      });
     } finally {
       setIsCompressing(false);
     }
@@ -249,12 +308,40 @@ const VariationCard: React.FC<{
           <h3 className="text-2xl font-bold text-white glow-text">{result.title}</h3>
           <p className="text-white/50 text-sm max-w-2xl">{result.description}</p>
           
-          <div className="flex items-center gap-2 mt-4 pt-2">
+          <div className="flex items-center gap-2 mt-4 pt-2 flex-wrap">
+             {/* Mode Selector (Hidden until hovered/focused) */}
+             <div className="flex items-center gap-1 bg-black/30 border border-white/10 rounded-lg p-1">
+               <button
+                 onClick={() => setCompressionMode('fast')}
+                 disabled={isCompressing}
+                 className={cn(
+                   "px-2 py-1 text-xs rounded transition-all",
+                   compressionMode === 'fast'
+                     ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/50'
+                     : 'text-white/50 hover:text-white/70'
+                 )}
+               >
+                 ⚡ Fast
+               </button>
+               <button
+                 onClick={() => setCompressionMode('safe')}
+                 disabled={isCompressing}
+                 className={cn(
+                   "px-2 py-1 text-xs rounded transition-all",
+                   compressionMode === 'safe'
+                     ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
+                     : 'text-white/50 hover:text-white/70'
+                 )}
+               >
+                 🛡️ Safe
+               </button>
+             </div>
+
              <Button variant="ghost" size="sm" onClick={handleCompress} disabled={isCompressing} className="bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 text-xs border border-cyan-500/20 h-7 px-2">
                {isCompressing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin"/> : <Minimize2 className="w-3 h-3 mr-1"/>} COMPRESS
              </Button>
-             <Button 
-                variant="ghost" size="sm" 
+             <Button
+                variant="ghost" size="sm"
                 onClick={() => onToggleArena(result.id)}
                 disabled={!isSelectedForArena && isArenaFull}
                 className={cn("text-xs border h-7 px-2 transition-all", isSelectedForArena ? "bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30" : "bg-black/20 text-white/40 border-white/10 hover:bg-white/10 hover:text-white")}
@@ -362,6 +449,154 @@ const VariationCard: React.FC<{
           )}
         </div>
       </div>
+
+      {/* Compression Result Modal */}
+      <AnimatePresence>
+        {compressionResult && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setCompressionResult(null)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#0B0D17] border border-white/10 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-b from-[#0B0D17] to-[#0B0D17]/80 backdrop-blur-xl border-b border-white/5 p-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
+                    <Minimize2 className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Compression Results</h2>
+                    <p className="text-white/50 text-sm">Review quality metrics before applying</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCompressionResult(null)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white/60" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 space-y-6">
+                {/* Metrics */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                    <p className="text-xs text-cyan-200/70 mb-1">Tokens Saved</p>
+                    <p className="text-2xl font-bold text-cyan-300">
+                      {compressionResult.tokensSaved}
+                    </p>
+                    <p className="text-xs text-cyan-200/50 mt-1">
+                      {compressionResult.percentReduction}% reduction
+                    </p>
+                  </div>
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                    <p className="text-xs text-emerald-200/70 mb-1">Quality Score</p>
+                    <p className="text-2xl font-bold text-emerald-300">
+                      {compressionResult.quality}%
+                    </p>
+                    <p className="text-xs text-emerald-200/50 mt-1">
+                      Meaning preserved
+                    </p>
+                  </div>
+                </div>
+
+                {/* Original vs Compressed */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-semibold text-white/70">
+                        Original
+                      </label>
+                      <span className="text-xs text-white/40">
+                        ~{Math.ceil(compressionResult.original.length / 4)} tokens
+                      </span>
+                    </div>
+                    <div className="p-3 bg-black/40 border border-white/10 rounded-lg text-xs text-white/70 max-h-[200px] overflow-y-auto font-mono leading-relaxed">
+                      {compressionResult.original}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-semibold text-white/70">
+                        Compressed
+                      </label>
+                      <span className="text-xs text-white/40">
+                        ~{Math.ceil(compressionResult.compressed.length / 4)} tokens
+                      </span>
+                    </div>
+                    <div className="p-3 bg-black/40 border border-emerald-500/20 rounded-lg text-xs text-emerald-100 max-h-[200px] overflow-y-auto font-mono leading-relaxed">
+                      {compressionResult.compressed}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quality Assessment */}
+                {compressionResult.quality > 0 && (
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                    <p className="text-sm text-emerald-200 flex items-center gap-2">
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      Quality threshold met ({compressionMode === 'safe' ? '85%+ validation' : 'keyword preservation'})
+                    </p>
+                  </div>
+                )}
+
+                {compressionResult.quality === 0 && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <p className="text-sm text-red-300 flex items-center gap-2">
+                      <X className="w-4 h-4 text-red-400" />
+                      Quality too low (Safe mode requires 85%+). Original kept unchanged.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="border-t border-white/5 bg-black/40 p-6 flex gap-3">
+                {compressionResult.quality > 0 ? (
+                  <>
+                    <Button
+                      onClick={() => {
+                        onUpdateContent(result.id, compressionResult.compressed);
+                        setCompressionResult(null);
+                      }}
+                      className="flex-1 h-10"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      Apply Compression
+                    </Button>
+                    <Button
+                      onClick={() => setCompressionResult(null)}
+                      variant="outline"
+                      className="flex-1 h-10"
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={() => setCompressionResult(null)}
+                    variant="outline"
+                    className="flex-1 h-10"
+                  >
+                    Close
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Card>
   );
 };

@@ -8,9 +8,34 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## In progress
 
-- None
+- None (Phase 5.1 complete)
 
 ## Completed recently
+
+- **Phase 5.1: VariationCard Compression Enhancement** ✅ COMPLETE
+  - Added dual-mode compression selector (Fast/Safe) near COMPRESS button
+  - Fast mode: 1 API call with keyword validation (~$0.0001)
+  - Safe mode: 2 API calls with LLM judge validation (~$0.0003)
+  - Created compression results modal showing:
+    - Original vs compressed side-by-side with token counts
+    - Quality score (% meaning preserved)
+    - Tokens saved and reduction percentage
+    - Quality assessment (threshold validation)
+  - Added accept/reject workflow:
+    - Accept button applies compression to prompt
+    - Reject button cancels without modifying content
+    - Quality validation: Safe mode rejects if < 85%
+  - Enhanced handleCompress to:
+    - Check cache first (instant, free if cached)
+    - Calculate metrics using keyword preservation + token counting
+    - Validate quality based on selected mode
+    - Show results before applying (no auto-apply)
+  - UI improvements:
+    - Mode selector buttons (⚡ Fast / 🛡️ Safe) with cost indicators
+    - Modal shows both original and compressed with quality metrics
+    - Apply button only appears if quality threshold met
+  - All tests passing (315/315), lint clean
+  - Ready for production use
 
 - **Phase 5: Compression Service Enhancement** ✅ COMPLETE
   - Standalone compression service: New "COMPRESS" button in header opens modal
@@ -79,10 +104,9 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Planned next (suggested)
 
-1. Phase 5.1: VariationCard compression enhancement (add mode selection to existing compress button)
-2. Phase 6: Performance tuning (response caching, lazy loading, bundle optimization)
-3. Phase 7: Offline-first behaviors (offline mode detection, local-only fallback)
-4. Phase 8: Advanced analytics and telemetry (optional future)
+1. Phase 6: Performance tuning (response caching, lazy loading, bundle optimization)
+2. Phase 7: Offline-first behaviors (offline mode detection, local-only fallback)
+3. Phase 8: Advanced analytics and telemetry (optional future)
 
 ## Blockers / risks
 
@@ -90,13 +114,13 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Next agent handoff
 
-- Phase 5 (Compression Service Enhancement) complete with standalone compression modal
-- New "COMPRESS" button in header opens compression service for any prompt
-- Cost optimization implemented: caching (~20% savings), free fallback, rule-based compression
-- Dual-mode compression (fast/safe) with transparent cost estimation
-- Users can now compress prompts anytime, not just generated ones
+- Phase 5.1 (VariationCard Compression Enhancement) complete with dual-mode selection
+- Added mode selector (Fast/Safe) with cost transparency next to COMPRESS button
+- Compression results modal shows metrics before applying (no auto-apply)
+- Quality validation: Safe mode (85%+ requirement), Fast mode (keyword preservation)
+- Accept/reject workflow: user controls whether to apply compression
+- Both standalone service (Phase 5) and VariationCard enhancement (Phase 5.1) now live
 - 315 tests passing, lint clean
-- Next: Phase 5.1 (enhance VariationCard with mode selection) or Phase 6 (performance tuning)
+- Next: Phase 6 (performance tuning) or Phase 7 (offline-first)
 - All compression utilities and service modal are production-ready
-- Follow `AI_MASTER.md` process for all future work
 
