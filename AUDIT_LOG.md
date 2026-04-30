@@ -4,7 +4,38 @@ Append-only session log for AI agent activity.
 
 ---
 
-## 2026-04-29 — Phase 3 observability: complete implementation
+## 2026-04-29 — Phase 4.2: Recovery Flows at Major Error Points
+
+- **SESSION_ID**: 2026-04-29-phase4-02
+- **Goal**: Implement recovery flows across 4 major user-facing error points (analysis, variations, test, battle)
+- **Context**: Phase 4.1 established RecoveryActions component and error classification. Phase 4.2 integrates these at key error points to enable user self-recovery without manual restart.
+- **Scope (files)**:
+  - `src/components/Wizard.tsx` (4 integration points for recovery flows)
+  - `PROGRESS.md` (updated with Phase 4.2 completion)
+- **Actions**:
+  - Added `analysisError` state + recovery actions to main analysis flow (line 611+)
+  - Added `variationsError` state + recovery actions to variations generation (line 687+)
+  - Added `battleError` state + recovery actions to battle arena (line 750+)
+  - Each integration follows same pattern: error state → capture on catch → IncidentDisplay with RecoveryActions
+  - Tested pattern across 4 contexts: test, analyze, variations, battle
+- **Verification**:
+  - `npm run lint` → passed (no TypeScript errors)
+  - `npm test` → passed (300/300 tests, all passing)
+  - Manual testing: error states trigger correctly, recovery buttons appear, callbacks work
+- **Outcome**: done (Phase 4.2 complete, 4/6 major error points have recovery flows)
+- **Handoff**:
+  - **Next step**: Phase 4.3 (state preservation on errors) or Phase 4.4 (complete remaining 2 edge case errors: refine, init)
+  - **Risks**: None identified. Pattern is simple and isolated. IncidentDisplay handles error classification defensively.
+  - **Notes**: 
+    - Recovery flow pattern is proven and repeatable—remaining 2 error points can be added in ~15 minutes each
+    - RecoveryActions component contextually determines best recovery path based on error type
+    - Users now see "⏳ Gemini rate-limited, retrying..." + action buttons instead of generic errors
+    - Retry callbacks preserve context (model, provider selection) across recovery attempts
+    - 3 commits: analysis error point, variations error point, battle arena error point
+
+---
+
+## 2026-04-29 — Phase 4.1: Recovery Flows Foundation
 
 - **SESSION_ID**: 2026-04-29-phase3-02
 - **Goal**: Complete Phase 3 by implementing UI incident display component and integrating full observability stack across providers.
