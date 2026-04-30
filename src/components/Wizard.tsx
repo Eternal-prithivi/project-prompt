@@ -14,6 +14,7 @@ import { IncidentDisplay } from './IncidentDisplay';
 import { OllamaSetupModal } from './OllamaSetupModal';
 import { ModelGallery } from './ModelGallery';
 import { getSystemInfo } from '../services/systemInfo';
+import { savePreservedState, getPreservedState, clearPreservedState, hasPreservedState, restorePreservedState } from '../services/utils/statePreservation';
 
 const MetricBar = ({ label, score }: { label: string, score: number }) => (
   <div className="bg-black/20 border border-white/5 p-3 rounded-xl flex flex-col items-center shadow-inner">
@@ -442,6 +443,21 @@ export const Wizard = () => {
     if (ollamaUrl) {
       loadOllamaModels(ollamaUrl);
     }
+
+    // Restore preserved state if available (e.g., after error recovery)
+    if (hasPreservedState()) {
+      const preserved = getPreservedState();
+      if (preserved) {
+        const restored = restorePreservedState(preserved);
+        if (restored.initialInput) setInitialInput(restored.initialInput);
+        if (restored.components) setComponents(restored.components);
+        if (restored.interviewAnswers) setInterviewAnswers(restored.interviewAnswers);
+        if (restored.results) setResults(restored.results);
+        if (restored.arenaSelections) setArenaSelections(restored.arenaSelections);
+        if (restored.selectedEngine) setSelectedEngine(restored.selectedEngine);
+        if (restored.step) setStep(restored.step);
+      }
+    }
   }, []);
 
   const handleUnlockCredentials = () => {
@@ -619,9 +635,17 @@ export const Wizard = () => {
       const analyzed = await analyzePrompt(initialInput);
       setComponents(analyzed);
       setStep('refining');
+      // Clear preserved state on success
+      clearPreservedState();
     } catch (error: any) {
       setAnalysisError(error);
       setErrorMsg(error?.message || 'Failed to analyze prompt. Please try again.');
+      // Preserve state for recovery
+      savePreservedState({
+        initialInput,
+        selectedEngine,
+        step: 'initial',
+      });
     } finally {
       setLoading(false);
     }
@@ -694,9 +718,18 @@ export const Wizard = () => {
       setResults(generated);
       saveToHistory(generated);
       setStep('results');
+      // Clear preserved state on success
+      clearPreservedState();
     } catch (error: any) {
       setVariationsError(error);
       setErrorMsg(error?.message || 'Failed to generate variations. Please try again.');
+      // Preserve state for recovery
+      savePreservedState({
+        components,
+        interviewAnswers,
+        selectedEngine,
+        step: 'refining',
+      });
     } finally {
       setLoading(false);
     }
@@ -775,10 +808,20 @@ export const Wizard = () => {
           const judgeRes = await judgeArenaOutputs(components, a.content, resA, b.content, resB);
           if (!isMountedRef.current) return;
           setVerdict(judgeRes);
+          // Clear preserved state on success
+          clearPreservedState();
         } catch(e: any) {
           if (isMountedRef.current) {
             setBattleError(e);
             setErrorMenu(safeErrorMessage(e));
+            // Preserve state for recovery
+            savePreservedState({
+              components,
+              results,
+              arenaSelections,
+              selectedEngine,
+              step: 'results',
+            });
           }
         } finally {
           if (isMountedRef.current) setIsFighting(false);
@@ -818,6 +861,7 @@ export const Wizard = () => {
                onClose={() => {
                  setBattleError(null);
                  setErrorMenu('');
+                 clearPreservedState();
                }}
              />
            ) : errorMenu && (
@@ -1266,6 +1310,7 @@ export const Wizard = () => {
                     onClose={() => {
                       setAnalysisError(null);
                       setErrorMsg(null);
+                      clearPreservedState();
                     }}
                   />
                 ) : errorMsg && (
@@ -1280,7 +1325,7 @@ export const Wizard = () => {
               <motion.div key="refining" variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="space-y-8">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="sm" onClick={() => setStep('initial')} className="flex gap-2 items-center"><ChevronLeft className="w-5 h-5" /> BACK</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setStep('initial'); clearPreservedState(); }} className="flex gap-2 items-center"><ChevronLeft className="w-5 h-5" /> BACK</Button>
                     <h2 className="text-3xl font-bold text-white glow-text hidden md:block">Refine Architecture</h2>
                   </div>
                   <div className="flex gap-3">
@@ -1364,6 +1409,7 @@ export const Wizard = () => {
                           onClose={() => {
                             setVariationsError(null);
                             setErrorMsg(null);
+                            clearPreservedState();
                           }}
                         />
                       ) : errorMsg && (
@@ -1398,7 +1444,7 @@ export const Wizard = () => {
                         <Swords className="w-5 h-5"/> {arenaSelections.length === 2 ? 'ENTER BATTLE ARENA' : `SELECT 2 FOR ARENA (${arenaSelections.length}/2)`}
                       </Button>
                     )}
-                    <Button variant="secondary" onClick={() => {setStep('initial'); setArenaSelections([]);}} className="w-fit">New Architecture</Button>
+                    <Button variant="secondary" onClick={() => { setStep('initial'); setArenaSelections([]); clearPreservedState(); }} className="w-fit">New Architecture</Button>
                   </div>
                 </div>
                 {errorMsg && <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-500 text-sm text-center">{errorMsg}</div>}

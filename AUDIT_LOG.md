@@ -206,3 +206,50 @@ Use this template for all future sessions:
 - **Next**: <clear handoff action>
 ```
 
+---
+
+## 2026-04-30 — Phase 4.3: State Preservation on Errors
+
+- **SESSION_ID**: 2026-04-30-phase4-03
+- **Goal**: Implement state preservation using sessionStorage so users don't lose progress when errors occur during analysis, variations generation, or battle flows.
+- **Context**: Phase 4.2 added recovery actions at error points. Phase 4.3 complements this with automatic state preservation/restoration, enabling users to seamlessly recover from failures.
+- **Scope (files)**:
+  - `src/services/utils/statePreservation.ts` (new)
+  - `src/components/Wizard.tsx` (8 integration points for save/restore/clear)
+  - `src/__tests__/utils/statePreservation.test.ts` (new, 15 tests)
+- **Actions**:
+  - Created `statePreservation.ts` utility module with functions:
+    - `savePreservedState()` — save partial state to sessionStorage with timestamp
+    - `getPreservedState()` — retrieve and validate state (1-hour TTL)
+    - `clearPreservedState()` — remove state on completion/dismissal
+    - `hasPreservedState()` — check if recoverable state exists
+    - `restorePreservedState()` — selective restoration (non-empty fields only)
+  - Integrated into Wizard.tsx:
+    - Mount effect: restore state if available on app load
+    - `handleStartAnalysis`: save state on error, clear on success
+    - `handleGenerateVariations`: save state on error, clear on success
+    - `runBattle` (in BattleView): save state on error, clear on success
+    - Back button: clear state when user navigates
+    - New Architecture button: clear state when user resets
+    - Error display onClose handlers: clear state when user dismisses error
+  - Added comprehensive tests (15 tests) covering:
+    - Save/merge/retrieve state
+    - State staleness (1-hour TTL)
+    - Selective restoration (non-empty fields)
+    - Edge cases (empty state, missing data)
+- **Verification**:
+  - `npm run lint` → passed (no TypeScript errors)
+  - `npm test` → passed (315/315 tests, 15 new state preservation tests)
+  - Manual validation: state persists across error recovery, expires correctly
+- **Outcome**: done (Phase 4.3 complete)
+- **Handoff**:
+  - **Next step**: Phase 4.4 (add recovery to init/refine errors) or Phase 5 (offline-first)
+  - **Risks**: None identified. sessionStorage is transient (clears on tab close). 1-hour TTL prevents stale recovery.
+  - **Notes**: 
+    - State includes: initialInput, components, interviewAnswers, results, arenaSelections, selectedEngine, step
+    - TTL is 1 hour; can be adjusted in `MAX_AGE_MS` constant
+    - State is cleared on successful workflow completion or user dismissal
+    - API keys are NOT stored in preserved state (security best practice)
+    - Pattern is extensible; can be applied to remaining 2 error points (init, refine) in ~15 minutes each
+
+---
