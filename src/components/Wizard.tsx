@@ -719,6 +719,7 @@ export const Wizard = () => {
       const [outputA, setOutputA] = useState('');
       const [outputB, setOutputB] = useState('');
       const [errorMenu, setErrorMenu] = useState('');
+      const [battleError, setBattleError] = useState<Error | null>(null);
       const isMountedRef = useRef(true);
 
       useEffect(() => {
@@ -748,7 +749,10 @@ export const Wizard = () => {
                            selectedEngine === 'grok' ? 'Grok' : 'AI Model';
 
       const runBattle = async () => {
-        setIsFighting(true); setVerdict(null); setErrorMenu('');
+        setIsFighting(true);
+        setVerdict(null);
+        setErrorMenu('');
+        setBattleError(null);
         try {
           if (selectedEngine === 'local') {
             const health = await validateOllamaConnection(ollamaUrl || 'http://localhost:11434');
@@ -772,7 +776,10 @@ export const Wizard = () => {
           if (!isMountedRef.current) return;
           setVerdict(judgeRes);
         } catch(e: any) {
-          if (isMountedRef.current) setErrorMenu(safeErrorMessage(e));
+          if (isMountedRef.current) {
+            setBattleError(e);
+            setErrorMenu(safeErrorMessage(e));
+          }
         } finally {
           if (isMountedRef.current) setIsFighting(false);
         }
@@ -801,7 +808,23 @@ export const Wizard = () => {
              </div>
            </header>
 
-           {errorMenu && <div className="bg-red-500/10 text-red-400 p-4 text-center font-mono">{errorMenu}</div>}
+           {battleError ? (
+             <IncidentDisplay
+               provider={selectedEngine === 'local' ? 'ollama' : selectedEngine}
+               error={battleError}
+               showActions={true}
+               context="battle"
+               onRetry={runBattle}
+               onClose={() => {
+                 setBattleError(null);
+                 setErrorMenu('');
+               }}
+             />
+           ) : errorMenu && (
+             <div className="bg-red-500/10 text-red-400 p-4 text-center font-mono">
+               {errorMenu}
+             </div>
+           )}
 
            {verdict && (
              <motion.div initial={{opacity:0, y:-20}} animate={{opacity:1, y:0}} className="sticky top-[88px] z-[65] mx-8 mt-8 p-6 rounded-2xl border-2 border-amber-500/50 bg-black/95 backdrop-blur-2xl shadow-[0_0_50px_rgba(245,158,11,0.2)] relative overflow-hidden">
