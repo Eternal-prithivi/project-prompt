@@ -52,6 +52,33 @@ export function createProvider(config: ProviderConfig): ILLMProvider {
 }
 
 /**
+ * Preload the provider's SDK chunk in the background.
+ * Fire-and-forget: never blocks or throws.
+ */
+export function preloadProvider(engine: LLMEngine): void {
+  try {
+    switch (engine) {
+      case 'gemini':
+        import('@google/genai').catch(() => { /* ignore preload failure */ });
+        break;
+      case 'chatgpt':
+      case 'grok':
+        import('openai').catch(() => { /* ignore preload failure */ });
+        break;
+      case 'claude':
+        import('@anthropic-ai/sdk').catch(() => { /* ignore preload failure */ });
+        break;
+      case 'deepseek':
+      case 'local':
+        // No heavyweight SDK to preload
+        break;
+    }
+  } catch {
+    // Preload is best-effort; never surface errors
+  }
+}
+
+/**
  * Get provider info by engine type
  */
 export function getProviderInfo(engine: string) {

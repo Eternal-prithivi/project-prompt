@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Wizard } from '../../components/Wizard';
 import * as geminiService from '../../services/geminiService';
 import * as credentialStore from '../../services/credentialStore';
+import * as providerFactory from '../../services/providerFactory';
 import * as validation from '../../services/providers/validation';
 import { clearPromptResponseCache } from '../../services/utils/promptResponseCache';
 import { clearPreservedState, savePreservedState } from '../../services/utils/statePreservation';
@@ -119,6 +120,10 @@ vi.mock('../../services/systemInfo', () => ({
     ollamaRunning: false,
     suggestedModel: 'deepseek-r1',
   }),
+}));
+
+vi.mock('../../services/providerFactory', () => ({
+  preloadProvider: vi.fn(),
 }));
 
 describe('Wizard Component', () => {
@@ -850,6 +855,72 @@ describe('Wizard Component', () => {
       expect(screen.getByText(/Prompt A followed the format more closely/i)).toBeInTheDocument();
       expect(screen.getByText(/Arena output A/i)).toBeInTheDocument();
       expect(screen.getByText(/Arena output B/i)).toBeInTheDocument();
+    });
+
+    it('reuses cached arena results on repeat fight and supports explicit refresh', async () => {
+      vi.mocked(geminiService.runPrompt)
+        .mockResolvedValueOnce('Arena output A')
+        .mockResolvedValueOnce('Arena output B')
+        .mockResolvedValueOnce('Arena output A refreshed')
+        .mockResolvedValueOnce('Arena output B refreshed');
+      vi.mocked(geminiService.judgeArenaOutputs)
+        .mockResolvedValueOnce({
+          winner: 'A',
+          reasoning: 'First verdict',
+        })
+        .mockResolvedValueOnce({
+          winner: 'B',
+          reasoning: 'Refreshed verdict',
+        });
+
+      render(<Wizard />);
+      fireEvent.change(screen.getByPlaceholderText(/What do you want the AI to do/i), {
+        target: { value: 'Help me write a professional email' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Analyze/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Refine Architecture/i)).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Forge Final Prompts/i }));
+      await waitFor(() => {
+        expect(screen.getByText(/Forged Variations/i)).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getAllByRole('button', { name: /add to arena/i })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: /add to arena/i })[1]);
+      fireEvent.click(screen.getByRole('button', { name: /enter battle arena/i }));
+
+      fireEvent.click(await screen.findByRole('button', { name: /^fight$/i }));
+      expect(await screen.findByText(/First verdict/i)).toBeInTheDocument();
+      expect(vi.mocked(geminiService.runPrompt)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(geminiService.judgeArenaOutputs)).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('button', { name: /^fight$/i }));
+      expect(await screen.findByText(/Cached response/i)).toBeInTheDocument();
+      expect(vi.mocked(geminiService.runPrompt)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(geminiService.judgeArenaOutputs)).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+      expect(await screen.findByText(/Refreshed verdict/i)).toBeInTheDocument();
+      expect(vi.mocked(geminiService.runPrompt)).toHaveBeenCalledTimes(4);
+      expect(vi.mocked(geminiService.judgeArenaOutputs)).toHaveBeenCalledTimes(2);
+    });
+
+    it('preloads only the currently selected provider hint', async () => {
+      render(<Wizard />);
+
+      await waitFor(() => {
+        expect(providerFactory.preloadProvider).toHaveBeenCalledWith('gemini');
+      });
+
+      fireEvent.click(screen.getByText(/SETTINGS/i));
+      fireEvent.click(screen.getByText(/ChatGPT \/ OpenAI/i));
+
+      await waitFor(() => {
+        expect(providerFactory.preloadProvider).toHaveBeenCalledWith('chatgpt');
+      });
     });
   });
 });

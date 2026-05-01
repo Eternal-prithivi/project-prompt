@@ -179,3 +179,12 @@ localStorage quota is edge case UX.
 **Decision:** Gemini, OpenAI-compatible, and Anthropic SDK packages must be dynamically imported inside their provider implementations instead of statically imported at provider module load.
 **Why:** Manual chunks reduced bundle size, but static provider imports still made cloud SDK chunks eligible for entry preloading. Dynamic SDK imports keep initial HTML focused on shared runtime chunks and load provider SDK code only when a selected provider needs it.
 **Impact:** `GeminiProvider`, `ChatGPTProvider`, `ClaudeProvider`, and `GrokProvider` own lazy SDK client initialization. Keep `src/__tests__/providers/providerSdkLoading.test.ts` in place so static SDK imports do not return accidentally.
+
+## DEC-016 — Battle runs use session cache with explicit fresh-run control
+
+**Date:** 2026-05-01
+**Decision:** Battle arena outputs and judge verdicts are cached in `sessionStorage` by provider, model, prompt A content, prompt B content, and current prompt components. Re-running the same fight reuses cache; explicit `REFRESH` bypasses cache for fresh provider/judge output.
+**Why:** Repeat arena runs for unchanged prompts should avoid redundant latency and token usage, while users still need deterministic control to request a fresh run.
+**Impact:** Cache logic belongs in `src/services/utils/battleResponseCache.ts`; `Wizard.tsx` battle flow should show when results came from cache and preserve explicit refresh semantics.
+
+Provider preload policy for this phase: `src/services/providerFactory.ts` exposes best-effort `preloadProvider(engine)` and UI should invoke it only for the currently selected provider (not all providers).

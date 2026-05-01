@@ -80,7 +80,7 @@ Required gates:
 - `npm test`
 - `npm run test:coverage` when auditing completeness, changing test infrastructure, or broadening a feature surface
 
-Current coverage audit note: the suite passes, but coverage is not yet comprehensive across every file. The latest measured baseline is 44.1% statements and 46.36% lines, with the largest gaps in `Wizard.tsx`, `IncidentDisplay.tsx`, and `RecoveryActions.tsx`. Future phases should raise coverage while preserving provider abstraction boundaries.
+Current coverage audit note: the suite passes, but coverage is not yet comprehensive across every file. The latest measured baseline is 73.71% statements and 75.65% lines, with the largest remaining gaps concentrated in `Wizard.tsx` and some provider modules. Future phases should continue raising coverage while preserving provider abstraction boundaries.
 
 ## Folder structure (high value)
 
@@ -122,7 +122,13 @@ Variables used by app workflow and generated snippets:
 - Cache keys include provider, model, and resolved prompt text so provider/model switches do not reuse stale outputs.
 - `VariationCard` uses the cache for repeated live tests and shows a "Cached response" badge when a result was reused.
 - The result panel `REFRESH` action bypasses cache and calls the selected provider again.
+- `src/services/utils/battleResponseCache.ts` stores battle arena outputs/verdicts in `sessionStorage`.
+- Battle cache keys include provider, model, prompt A/B content, and prompt components so repeat fights only reuse truly matching comparisons.
+- Arena `REFRESH` bypasses battle cache and forces a fresh provider run + fresh judge verdict.
+- `src/services/providerFactory.ts` exposes `preloadProvider(engine)` for best-effort selected-provider SDK preload hints.
+- `Wizard.tsx` calls `preloadProvider` for the currently selected provider when credentials are unlocked; non-selected providers are not preloaded.
 - Keep cache behavior covered in `src/__tests__/utils/promptResponseCache.test.ts` and `src/__tests__/components/Wizard.test.tsx`.
+- Keep battle cache behavior covered in `src/__tests__/utils/battleResponseCache.test.ts` and `src/__tests__/components/Wizard.test.tsx`.
 
 ## Commands AI agents should know
 

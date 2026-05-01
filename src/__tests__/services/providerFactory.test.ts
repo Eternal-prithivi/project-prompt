@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createProvider, getProviderInfo } from '../../services/providerFactory';
+import { createProvider, getProviderInfo, preloadProvider } from '../../services/providerFactory';
 import { GeminiProvider } from '../../services/providers/geminiProvider';
 import { ChatGPTProvider } from '../../services/providers/chatgptProvider';
 import { OllamaProvider } from '../../services/providers/ollamaProvider';
@@ -50,5 +50,21 @@ describe('providerFactory', () => {
     expect(PROVIDER_INFO.gemini.supportedModels).toContain('gemini-3.1-pro-preview');
     expect(PROVIDER_INFO.local.free).toBe(true);
     expect(PROVIDER_INFO.chatgpt.phase).toBe(2);
+  });
+
+  describe('preloadProvider', () => {
+    it('does not throw for any supported engine', () => {
+      expect(() => preloadProvider('gemini')).not.toThrow();
+      expect(() => preloadProvider('chatgpt')).not.toThrow();
+      expect(() => preloadProvider('claude')).not.toThrow();
+      expect(() => preloadProvider('grok')).not.toThrow();
+      expect(() => preloadProvider('deepseek')).not.toThrow();
+      expect(() => preloadProvider('local')).not.toThrow();
+    });
+
+    it('returns undefined for all engines (fire-and-forget)', () => {
+      expect(preloadProvider('gemini')).toBeUndefined();
+      expect(preloadProvider('local')).toBeUndefined();
+    });
   });
 });

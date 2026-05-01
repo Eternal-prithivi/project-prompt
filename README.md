@@ -112,7 +112,11 @@ Current named vendor chunks include:
 
 Live prompt tests use a session-scoped response cache keyed by provider, model, and resolved prompt text. Re-running the same test can return instantly from cache, while the result panel exposes a `REFRESH` action to bypass cache and call the active provider again.
 
+Battle arena runs also use a session-scoped cache keyed by provider, model, selected prompts, and current prompt components. Re-running the same fight can reuse cached outputs and verdict instantly, and the arena `REFRESH` action bypasses cache for fresh outputs.
+
 Cloud provider SDKs are dynamically imported by their provider implementations. This keeps Gemini, OpenAI, and Anthropic SDK chunks out of the initial HTML modulepreload list; they load only when a selected provider actually needs them.
+
+When users switch providers in Settings, the app issues a best-effort preload hint for the selected provider only, helping warm up the matching SDK chunk without eagerly preloading every provider.
 
 ## Testing and TDD workflow
 

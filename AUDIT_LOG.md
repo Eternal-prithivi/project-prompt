@@ -778,3 +778,52 @@ Use this template for all future sessions:
   - **Notes**: Provider routing remains centralized through `geminiService`/`providerFactory`; no UI code imports provider SDKs.
 
 ---
+
+  ## 2026-05-01 — Phase 6.5: Battle Cache Policy + Selected-Provider Preload Hints
+
+  - **SESSION_ID**: 2026-05-01T1925+0530-phase6-05
+  - **AGENT_NAME**: GitHub Copilot (GPT-5.3-Codex)
+  - **Goal**: Complete the in-progress Phase 6.5 performance work and close remaining gaps end-to-end.
+  - **Context**: Workspace already contained partial 6.5 edits (`battleResponseCache`, `providerFactory` preload helper, and battle flow changes in `Wizard.tsx`) but continuity docs were not updated and preload hints were not wired in UI.
+  - **Scope (files)**:
+    - `src/components/Wizard.tsx`
+    - `src/services/providerFactory.ts`
+    - `src/services/utils/battleResponseCache.ts`
+    - `src/__tests__/components/Wizard.test.tsx`
+    - `src/__tests__/services/providerFactory.test.ts`
+    - `src/__tests__/utils/battleResponseCache.test.ts`
+    - `README.md`
+    - `AI_CONTEXT.md`
+    - `DECISIONS.md`
+    - `PROGRESS.md`
+    - `SCRATCHPAD.md`
+    - `AUDIT_LOG.md`
+  - **Actions**:
+    - Audited existing 6.5 changes and confirmed battle cache utility + tests were present.
+    - Added/expanded Wizard component tests for:
+      - arena cache reuse on repeated fight
+      - explicit arena refresh for fresh output
+      - selected-provider preload hint wiring
+    - Implemented selected-provider preload wiring in `Wizard.tsx` using `preloadProvider(selectedEngine)` guarded by credential lock state.
+    - Updated arena refresh behavior to bypass cache without clearing the entire battle cache store.
+    - Updated runtime/architecture docs and durable decision log for 6.5 behavior.
+    - Updated continuity docs (`PROGRESS.md`, `SCRATCHPAD.md`, `AUDIT_LOG.md`).
+  - **TDD evidence**:
+    - Added preload wiring test in `src/__tests__/components/Wizard.test.tsx` before production wiring.
+    - Targeted Wizard test failed first with: `expected "vi.fn()" to be called with arguments: ['gemini']` (no preload call yet).
+    - After wiring preload in `Wizard.tsx`, targeted tests passed.
+  - **Verification**:
+    - `npm test -- --run src/__tests__/components/Wizard.test.tsx` -> failed first on preload assertion, then passed after implementation (40 tests)
+    - `npm test -- --run src/__tests__/components/Wizard.test.tsx src/__tests__/utils/battleResponseCache.test.ts src/__tests__/services/providerFactory.test.ts` -> passed (56 tests)
+    - `npm run lint` -> passed
+    - `npm test -- --run` -> passed (36 files, 398 tests)
+    - `npm run test:coverage -- --run` -> passed (36 files, 398 tests; 73.71% statements, 65.28% branches, 73.86% functions, 75.65% lines)
+    - `npm run build` -> passed; main app chunk 165.68 kB minified / 39.47 kB gzip
+    - `npm run check:continuity` -> passed
+  - **Outcome**: done
+  - **Handoff**:
+    - **Next step**: Start Phase 7 offline-first behaviors (offline detection + local-only fallback), or run a focused profiling pass if additional performance regressions appear.
+    - **Risks**: `Wizard.tsx` coverage remains lower than most modules despite improvements; continue targeted test slices.
+    - **Notes**: Existing React `act(...)` warnings in Wizard tests are pre-existing noise and did not fail gates.
+
+  ---

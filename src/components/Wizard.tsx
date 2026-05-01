@@ -11,8 +11,10 @@ import { validateGeminiKey, validateDeepseekKey, validateOllamaConnection, getOl
 import { safeErrorMessage } from '../services/utils/errors';
 import { IncidentDisplay } from './IncidentDisplay';
 import { getSystemInfo } from '../services/systemInfo';
+import { preloadProvider } from '../services/providerFactory';
 import { savePreservedState, getPreservedState, clearPreservedState, hasPreservedState, restorePreservedState } from '../services/utils/statePreservation';
 import { cachePromptResponse, getCachedPromptResponse } from '../services/utils/promptResponseCache';
+import { cacheBattleResponse, getCachedBattleResponse } from '../services/utils/battleResponseCache';
 import { cacheCompression, getCachedCompression } from '../services/utils/compressionCache';
 import { calculateTokenSavings } from '../services/utils/compressionCost';
 import { validateKeywordPreservation } from '../services/utils/keywordExtractor';
@@ -771,6 +773,14 @@ export const Wizard = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (isCredsLocked) {
+      return;
+    }
+
+    preloadProvider(selectedEngine);
+  }, [isCredsLocked, selectedEngine]);
+
   const handleUnlockCredentials = () => {
     try {
       setErrorMsg(null);
@@ -1119,6 +1129,7 @@ export const Wizard = () => {
       const [outputB, setOutputB] = useState('');
       const [errorMenu, setErrorMenu] = useState('');
       const [battleError, setBattleError] = useState<Error | null>(null);
+      const [battleFromCache, setBattleFromCache] = useState(false);
       const isMountedRef = useRef(true);
 
       useEffect(() => {
@@ -1147,8 +1158,9 @@ export const Wizard = () => {
                            selectedEngine === 'claude' ? 'Claude Sonnet' :
                            selectedEngine === 'grok' ? 'Grok' : 'AI Model';
 
-      const runBattle = async () => {
+      const runBattle = async (forceFresh = false) => {
         setIsFighting(true);
+        setBattleFromCache(false);
         setVerdict(null);
         setErrorMenu('');
         setBattleError(null);
@@ -1162,6 +1174,25 @@ export const Wizard = () => {
           const mockA = a.content + '\n\n(IMPORTANT: Fill in any bracketed variables with reasonable dummy examples before answering.)';
           const mockB = b.content + '\n\n(IMPORTANT: Fill in any bracketed variables with reasonable dummy examples before answering.)';
 
+          if (!forceFresh) {
+            const cached = getCachedBattleResponse({
+              provider: selectedEngine === 'local' ? 'ollama' : selectedEngine,
+              model: battleModel,
+              promptA: a.content,
+              promptB: b.content,
+              components,
+            });
+            if (cached) {
+              if (!isMountedRef.current) return;
+              setOutputA(cached.outputA);
+              setOutputB(cached.outputB);
+              setVerdict(cached.verdict);
+              setBattleFromCache(true);
+              setIsFighting(false);
+              return;
+            }
+          }
+
           // Run sequentially instead of Promise.all to prevent 429 rate limit errors on free tier accounts
           const resA = await runPrompt(mockA, battleModel);
           if (!isMountedRef.current) return;
@@ -1174,6 +1205,18 @@ export const Wizard = () => {
           const judgeRes = await judgeArenaOutputs(components, a.content, resA, b.content, resB);
           if (!isMountedRef.current) return;
           setVerdict(judgeRes);
+
+          cacheBattleResponse({
+            provider: selectedEngine === 'local' ? 'ollama' : selectedEngine,
+            model: battleModel,
+            promptA: a.content,
+            promptB: b.content,
+            components,
+            outputA: resA,
+            outputB: resB,
+            verdict: judgeRes,
+          });
+
           // Clear preserved state on success
           clearPreservedState();
         } catch(e: any) {
@@ -1194,6 +1237,10 @@ export const Wizard = () => {
         }
       };
 
+      const runBattleFresh = () => {
+        return runBattle(true);
+      };
+
       return (
         <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 120 }} className="fixed inset-0 bg-[#0B0D17] z-[60] flex flex-col">
            <div className="flex-1 overflow-y-auto w-full relative">
@@ -1209,10 +1256,15 @@ export const Wizard = () => {
              </div>
              
              <div className="flex gap-4">
-                <Button variant="primary" onClick={runBattle} disabled={isFighting} className="bg-amber-600 hover:bg-amber-500 text-white shadow-amber-500/20">
-                  {isFighting ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <Play className="w-5 h-5 fill-current mr-2" />} 
+                <Button variant="primary" onClick={() => runBattle()} disabled={isFighting} className="bg-amber-600 hover:bg-amber-500 text-white shadow-amber-500/20">
+                  {isFighting ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <Play className="w-5 h-5 fill-current mr-2" />}
                   {isFighting ? 'JUDGING...' : 'FIGHT'}
                 </Button>
+                {verdict && (
+                  <Button variant="ghost" onClick={() => runBattleFresh()} disabled={isFighting} className="text-amber-300 border border-amber-500/30 hover:bg-amber-500/10">
+                    <RefreshCw className="w-5 h-5 mr-2" /> REFRESH
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={() => setIsArenaModalOpen(false)}><X className="w-6 h-6"/></Button>
              </div>
            </header>
@@ -1241,7 +1293,7 @@ export const Wizard = () => {
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Swords className="w-64 h-64 text-amber-500"/></div>
                 <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
                    <div className="flex flex-col items-center justify-center min-w-[200px]">
-                     <span className="text-[10px] font-bold text-amber-500/50 tracking-[0.3em] mb-2">VERDICT</span>
+                     <span className="text-[10px] font-bold text-amber-500/50 tracking-[0.3em] mb-2">VERDICT {battleFromCache && <span className="inline-block ml-2 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[9px] tracking-normal">Cached response</span>}</span>
                      <div className={cn("text-6xl font-black tracking-tighter", verdict.winner === 'TIE' ? 'text-gray-400' : (verdict.winner === 'A' ? 'text-blue-400 glow-text' : 'text-fuchsia-400 glow-text'))}>
                         {verdict.winner === 'TIE' ? 'TIE' : `${verdict.winner} WINS`}
                      </div>

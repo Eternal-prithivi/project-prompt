@@ -8,9 +8,31 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## In progress
 
-- None (Phase 6.4 provider SDK dynamic loading complete)
+- None (Phase 6.5 battle cache + selected-provider preload hints complete)
 
 ## Completed recently
+
+- **Phase 6.5: Battle Cache Policy + Selected-Provider Preload Hints** ✅ COMPLETE
+  - Added `src/services/utils/battleResponseCache.ts` for session-scoped A/B battle output caching
+  - Wired battle arena flow in `src/components/Wizard.tsx` to:
+    - Reuse cached battle outputs and verdicts for repeat fights with the same provider/model/prompts/components
+    - Show a visible `Cached response` badge when verdict came from cache
+    - Support explicit `REFRESH` to bypass cache and fetch fresh provider outputs
+  - Added selected-provider-only preload hints:
+    - Added `preloadProvider(engine)` in `src/services/providerFactory.ts`
+    - Wired `Wizard.tsx` to trigger best-effort preload only for the currently selected provider when credentials are unlocked
+  - Added tests:
+    - `src/__tests__/utils/battleResponseCache.test.ts`
+    - `src/__tests__/services/providerFactory.test.ts` preload coverage
+    - `src/__tests__/components/Wizard.test.tsx` battle cache/refresh and provider preload wiring coverage
+  - Documented runtime behavior in `README.md`, `AI_CONTEXT.md`, and `DECISIONS.md`
+  - Verification passed:
+    - `npm test -- --run src/__tests__/components/Wizard.test.tsx src/__tests__/utils/battleResponseCache.test.ts src/__tests__/services/providerFactory.test.ts` (56/56)
+    - `npm run lint`
+    - `npm test -- --run` (398/398)
+    - `npm run test:coverage -- --run` (398/398, 73.71% statements / 75.65% lines)
+    - `npm run build`
+    - `npm run check:continuity`
 
 - **Phase 6.4: Provider SDK Dynamic Loading** ✅ COMPLETE
   - Removed top-level cloud SDK imports from provider modules:
@@ -272,13 +294,13 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Planned next (suggested)
 
-1. Phase 6.5: Continue performance tuning (route-level/component-level profiling, battle-run cache policy decision, preload hints for selected provider only)
-2. Phase 7: Offline-first behaviors (offline mode detection, local-only fallback)
-3. Phase 8: Advanced analytics and telemetry (optional future)
+1. Phase 7: Offline-first behaviors (offline mode detection, local-only fallback)
+2. Phase 8: Advanced analytics and telemetry (optional future)
+3. Additional performance profiling pass (route/component-level profiling if needed)
 
 ## Blockers / risks
 
-- Coverage is now measurable, but not yet comprehensive across every file (latest: 59.42% statements / 62.26% lines)
+- Coverage is improved, but not yet comprehensive across every file (latest: 73.71% statements / 75.65% lines)
 - `npm install` reported 1 moderate audit vulnerability; no force fix was applied because that can introduce unrelated breaking changes
 
 ## Next agent handoff
@@ -297,5 +319,6 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 - Phase 6.2 manual chunk optimization complete: main app chunk is now 157.25 kB minified / 36.88 kB gzip, and build has no Vite chunk warning
 - Phase 6.3 prompt response caching complete: repeated live tests reuse session cache, and `REFRESH` bypasses cache for fresh provider output
 - Phase 6.4 provider SDK dynamic loading complete: initial HTML no longer modulepreloads Gemini/OpenAI/Anthropic SDK chunks
-- 508 tests passing via `npm test -- --run`, lint clean, coverage command passing, build passing, continuity check passing
-- Next: Phase 6.5 performance work (profiling/battle-run cache policy/selected-provider preload hints) or Phase 7 offline-first
+- Phase 6.5 complete: battle arena now reuses session cache for repeat fights, `REFRESH` fetches fresh outputs, and selected provider changes trigger best-effort preload hints for that provider only
+- 398 tests passing via `npm test -- --run`, lint clean, coverage command passing, build passing, continuity check passing
+- Next: Phase 7 offline-first behaviors or Phase 8 advanced analytics
