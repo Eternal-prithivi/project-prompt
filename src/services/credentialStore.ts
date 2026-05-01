@@ -67,7 +67,7 @@ function getDeviceFingerprint(): string {
     }
 
     return `prompt-architect-${Math.abs(hash).toString(16).slice(0, 16)}`;
-  } catch (e) {
+  } catch {
     // Fallback if fingerprinting fails
     return 'prompt-architect-default-key-do-not-use-in-prod';
   }

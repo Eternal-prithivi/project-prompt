@@ -1,94 +1,96 @@
-/**
- * Tests for Claude Provider
- * Focus on initialization, error handling, and interface compliance
- */
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClaudeProvider } from '../../services/providers/claudeProvider';
 
+const messageResponse = (text: string) => ({
+  content: [{ type: 'text', text }],
+});
+
 describe('ClaudeProvider', () => {
-  const stubClient = (provider: ClaudeProvider) => {
+  let provider: ClaudeProvider;
+  let create: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    create = vi.fn();
+    provider = new ClaudeProvider('sk-ant-test-key');
     (provider as any).client = {
       messages: {
-        create: vi.fn().mockResolvedValue({
-          content: [{ type: 'text', text: '[]' }],
-        }),
+        create,
       },
     };
-  };
-  describe('initialization', () => {
-    it('should initialize with valid API key', () => {
-      expect(() => new ClaudeProvider('sk-ant-test-key')).not.toThrow();
-    });
+  });
 
-    it('should throw error with missing API key', () => {
-      expect(() => new ClaudeProvider('')).toThrow('Claude API key is required');
-    });
+  it('rejects missing API keys at construction time', () => {
+    expect(() => new ClaudeProvider('')).toThrow('Claude API key is required');
+    expect(() => new ClaudeProvider('undefined')).toThrow('Claude API key is required');
+  });
 
-    it('should throw error with undefined API key', () => {
-      expect(() => new ClaudeProvider('undefined')).toThrow('Claude API key is required');
+  it('parses structured analysis responses and adds an empty custom persona', async () => {
+    create.mockResolvedValueOnce(
+      messageResponse('```json\n{"role":"Strategist","task":"Plan","context":"Ops","format":"JSON","constraints":"None"}\n```')
+    );
+
+    await expect(provider.analyzePrompt('Plan this')).resolves.toEqual({
+      role: 'Strategist',
+      task: 'Plan',
+      context: 'Ops',
+      format: 'JSON',
+      constraints: 'None',
+      customPersona: '',
     });
   });
 
-  describe('interface compliance', () => {
-    let provider: ClaudeProvider;
+  it('preserves scores and custom persona during magicRefine', async () => {
+    create.mockResolvedValueOnce(
+      messageResponse('{"role":"Strategist","task":"Refined","context":"Ops","format":"Markdown","constraints":"Strict"}')
+    );
 
-    beforeEach(() => {
-      provider = new ClaudeProvider('sk-ant-test-key');
-      stubClient(provider);
+    const refined = await provider.magicRefine({
+      role: 'Strategist',
+      task: 'Original',
+      context: 'Ops',
+      format: 'Text',
+      constraints: 'Loose',
+      customPersona: 'Coach',
+      scores: { clarity: 1, context: 2, constraints: 3, tone: 4, overall: 5, feedback: 'x' },
     });
 
-    it('should implement all required ILLMProvider methods', () => {
-      expect(typeof provider.analyzePrompt).toBe('function');
-      expect(typeof provider.generateVariations).toBe('function');
-      expect(typeof provider.magicRefine).toBe('function');
-      expect(typeof provider.integrateAnswers).toBe('function');
-      expect(typeof provider.generateExamples).toBe('function');
-      expect(typeof provider.runPrompt).toBe('function');
-      expect(typeof provider.compressPrompt).toBe('function');
-      expect(typeof provider.judgeArenaOutputs).toBe('function');
-    });
-
-    it('should have analyzePrompt as async method', async () => {
-      const result = provider.analyzePrompt('test');
-      expect(result instanceof Promise).toBe(true);
-    });
-
-    it('should have generateVariations as async method', async () => {
-      const result = provider.generateVariations({
-        role: 'test',
-        task: 'test',
-        context: 'test',
-        format: 'test',
-        constraints: 'test',
-      });
-      expect(result instanceof Promise).toBe(true);
-    });
-
-    it('should have runPrompt method with customizable model', async () => {
-      // Test that the method exists and accepts model parameter
-      expect(typeof provider.runPrompt).toBe('function');
-      const result = provider.runPrompt('test prompt', 'claude-3-opus-20250219');
-      expect(result instanceof Promise).toBe(true);
-    });
+    expect(refined.customPersona).toBe('Coach');
+    expect(refined.scores?.overall).toBe(5);
+    expect(refined.task).toBe('Refined');
   });
 
-  describe('model compatibility', () => {
-    let provider: ClaudeProvider;
+  it('forwards explicit models through runPrompt', async () => {
+    create.mockResolvedValueOnce(messageResponse('Claude answer'));
 
-    beforeEach(() => {
-      provider = new ClaudeProvider('sk-ant-test-key');
-      stubClient(provider);
-    });
+    await expect(provider.runPrompt('Hello', 'claude-3-sonnet-20250219')).resolves.toBe('Claude answer');
+    expect(create.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        model: 'claude-3-sonnet-20250219',
+      })
+    );
+  });
 
-    it('should accept claude-3-opus model', () => {
-      // Verify method exists and accepts the model parameter
-      expect(typeof provider.runPrompt).toBe('function');
-    });
+  it('falls back to the original prompt when compression comes back empty', async () => {
+    create.mockResolvedValueOnce({ content: [{ type: 'tool_use', id: 'ignored' }] });
 
-    it('should accept claude-3-sonnet model parameter', () => {
-      const result = provider.runPrompt('test', 'claude-3-sonnet-20250219');
-      expect(result instanceof Promise).toBe(true);
+    await expect(provider.compressPrompt('Original prompt')).resolves.toBe('Original prompt');
+  });
+
+  it('returns a safe tie verdict if judging fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    create.mockRejectedValueOnce(new Error('Judge failure'));
+
+    await expect(
+      provider.judgeArenaOutputs(
+        { role: 'Judge', task: 'Compare', context: '', format: '', constraints: '' },
+        'Prompt A',
+        'Output A',
+        'Prompt B',
+        'Output B'
+      )
+    ).resolves.toEqual({
+      winner: 'TIE',
+      reasoning: 'Judge error: Judge failure',
     });
   });
 });

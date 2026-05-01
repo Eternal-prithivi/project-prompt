@@ -28,22 +28,27 @@ When trade-offs exist, optimize for correctness and maintainability over speed.
 
 ## Operating principles
 
-1. **Think in systems, edit in slices**
+1. **Test first, then implement**
+   - For behavior changes, write or update the smallest meaningful failing test first
+   - Cover success, failure, edge cases, and recovery paths appropriate to the risk
+   - Do not treat a feature as complete because it works manually; automated tests are required unless explicitly documented as impractical
+
+2. **Think in systems, edit in slices**
    - Understand affected flows first
    - Implement in small reversible increments
    - Verify each increment before moving on
 
-2. **Preserve architecture**
+3. **Preserve architecture**
    - Respect provider abstraction boundaries (`ILLMProvider`, `providerFactory`, `geminiService`)
    - Avoid bypassing existing service layers
    - Reuse utilities (`timeout`, `errors`) before adding new ones
 
-3. **Be explicit and deterministic**
+4. **Be explicit and deterministic**
    - Prefer explicit types and contracts
    - Avoid hidden behavior changes
    - Make error states predictable and observable
 
-4. **No silent regressions**
+5. **No silent regressions**
    - Validate behavior with lint/tests
    - If tests need updates, explain *why* in audit notes
    - Do not claim completion without verification status
@@ -66,11 +71,30 @@ Before coding, produce an internal model of:
 Break work into:
 
 - analysis
+- test design / failing test
 - implementation
 - validation
 - handoff/documentation
 
 Never skip validation and handoff.
+
+### B.1) TDD workflow
+
+For every feature, bug fix, and reliability change:
+
+1. Identify the behavioral contract and risk areas.
+2. Add or update tests before editing production code.
+3. Run the targeted test and confirm it fails for the intended reason when practical.
+4. Implement the minimum production change.
+5. Re-run the targeted test, then the full gates.
+
+Expected coverage by change type:
+
+- UI behavior: component tests and integration coverage for the workflow.
+- Provider behavior: provider tests for success, provider errors, timeout/network failure, malformed responses, and provider-specific model handling.
+- Utility behavior: direct unit tests for normal paths, edge cases, invalid input, storage failure, and deterministic boundaries.
+- Cross-flow behavior: integration tests that exercise the real orchestration path with mocks.
+- Performance changes: build verification and tests proving behavior remains unchanged.
 
 ### C) Change minimization
 
@@ -98,6 +122,7 @@ At minimum:
 
 - `npm run lint`
 - `npm test` (or targeted tests when user scope is narrow and explicitly allows)
+- `npm run test:coverage` when auditing completeness, adding broad features, or changing test infrastructure
 
 Report exact results and unresolved failures.
 
@@ -140,6 +165,7 @@ Keep reports concise, factual, and file-specific.
 - Keep credential handling encrypted and explicit
 - Keep timeouts/error handling consistent across providers
 - Keep docs synchronized when architecture/process changes
+- Treat TDD as the default implementation method for behavioral work
 - Always update `PROGRESS.md` and `AUDIT_LOG.md` after a completed task/session
 
 ---
@@ -149,8 +175,8 @@ Keep reports concise, factual, and file-specific.
 A task is complete only when all are true:
 
 1. Requested behavior is implemented
-2. Relevant quality checks are run and reported
-3. `PROGRESS.md` is updated
-4. `AUDIT_LOG.md` has a new entry
-5. Handoff note is clear for the next agent
-
+2. Tests were created or updated first for behavior changes, or a documented exception exists
+3. Relevant quality checks are run and reported
+4. `PROGRESS.md` is updated
+5. `AUDIT_LOG.md` has a new entry
+6. Handoff note is clear for the next agent

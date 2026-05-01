@@ -29,10 +29,10 @@ export interface RecoveryActionsProps {
  * Renders contextual recovery actions based on error type and context
  */
 export const RecoveryActions: React.FC<RecoveryActionsProps> = ({
-  error,
+  error: _error,
   errorType,
-  provider,
-  context,
+  provider: _provider,
+  context: _context,
   onRetry,
   onSwitchProvider,
   onSwitchModel,

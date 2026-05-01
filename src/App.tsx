@@ -1,5 +1,4 @@
 import { Wizard } from './components/Wizard';
-import { Sparkles } from 'lucide-react';
 
 export default function App() {
   return (

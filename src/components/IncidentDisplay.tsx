@@ -7,10 +7,10 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { AlertCircle, Zap, Loader } from 'lucide-react';
-import { logger, LogEntry, LogLevel } from '../services/utils/logger';
-import { getIncidentMessage, ProviderErrorType, classifyProviderError } from '../services/utils/errorClassification';
+import { logger } from '../services/utils/logger';
+import { ProviderErrorType, classifyProviderError } from '../services/utils/errorClassification';
 import { RecoveryActions } from './RecoveryActions';
 
 export interface IncidentDisplayProps {
@@ -47,9 +47,7 @@ export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
   availableProviders = [],
   availableModels = [],
 }) => {
-  const [recentLogs, setRecentLogs] = useState<LogEntry[]>([]);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [errorType, setErrorType] = useState<ProviderErrorType>(ProviderErrorType.UNKNOWN);
 
   useEffect(() => {
     if (!provider) return;
@@ -58,16 +56,11 @@ export const IncidentDisplay: React.FC<IncidentDisplayProps> = ({
     const interval = setInterval(() => {
       const logs = logger.getProviderErrors(provider, 5);
       if (logs.length > 0) {
-        setRecentLogs(logs);
         // If most recent error is classified as retryable, mark as retrying
         const latest = logs[logs.length - 1];
         if (latest?.data?.isRetryable) {
           setIsRetrying(true);
           setTimeout(() => setIsRetrying(false), 2000);
-        }
-        // Extract error type from logs
-        if (latest?.data?.errorType) {
-          setErrorType(latest.data.errorType);
         }
       }
     }, 500);

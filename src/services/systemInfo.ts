@@ -340,7 +340,7 @@ export const getSystemInfo = async (): Promise<SystemInfo> => {
         signal: AbortSignal.timeout(3000), // 3 second timeout
       });
       ollamaRunning = response.ok;
-    } catch (e) {
+    } catch {
       ollamaRunning = false;
     }
 
@@ -358,7 +358,7 @@ export const getSystemInfo = async (): Promise<SystemInfo> => {
       reason,
       suggestedModel: 'neural-chat' // Default suggestion until user provides hardware info
     };
-  } catch (e) {
+  } catch {
     return {
       os: 'Unknown',
       canRunOllama: false,

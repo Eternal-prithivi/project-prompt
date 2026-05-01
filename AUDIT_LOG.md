@@ -373,3 +373,408 @@ Use this template for all future sessions:
     - Ready for VariationCard enhancement (add mode selection) or move to Phase 6
 
 ---
+
+## 2026-04-30 — Phase 6.1: Lazy Modal Code Splitting
+
+- **SESSION_ID**: 2026-04-30T1340Z-phase6-01
+- **AGENT_NAME**: codex
+- **Goal**: Start Phase 6 performance tuning with a minimal bundle/startup improvement.
+- **Context**: `SCRATCHPAD.md` had no active task and `PROGRESS.md` listed Phase 6 performance tuning as the next suggested path.
+- **Scope (files)**:
+  - `src/components/Wizard.tsx`
+  - `src/__tests__/components/VariationCard.compression.test.tsx`
+  - `src/__tests__/components/VariationCard.handleCompress.test.ts`
+  - `src/__tests__/utils/compressionCache.test.ts`
+  - `src/__tests__/utils/compressionCost.test.ts`
+  - `src/__tests__/utils/keywordExtractor.test.ts`
+  - `SCRATCHPAD.md`
+  - `PROGRESS.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Replaced eager imports for `OllamaSetupModal`, `ModelGallery`, and `CompressionServiceModal` with `React.lazy` in `Wizard.tsx`.
+  - Conditionally mounted those modal chunks only when their open state is true, under a `React.Suspense` boundary.
+  - Repaired existing untracked compression tests that blocked full quality gates due to literal-type comparisons, boundary-time TTL assertions, case-sensitive sample text, floating-point exact equality, and a hit-rate simulation that pre-populated every entry.
+- **Verification**:
+  - `npm run lint` -> passed
+  - `npm test` -> passed (21 files, 474 tests)
+  - `npm test -- --run` -> passed (21 files, 474 tests)
+  - `npm run build` -> passed; emitted separate chunks for `ModelGallery`, `CompressionServiceModal`, and `OllamaSetupModal`; Vite still reports the main chunk advisory at ~1,048 kB minified / 280 kB gzip
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue Phase 6.2 by splitting provider SDKs/manual chunks or adding explicitly refreshable response caching.
+  - **Risks**: Main app bundle remains above Vite's 500 kB advisory; modal lazy loading is verified, but provider SDKs are still in the main chunk.
+  - **Notes**: The compression test files were already untracked at session start; changes preserve them and make the full gate pass.
+
+---
+
+## 2026-04-30 — Test Audit + TDD Governance Update
+
+- **SESSION_ID**: 2026-04-30T1352Z-tdd-audit
+- **AGENT_NAME**: codex
+- **Goal**: Verify current phase test status and make test-driven development the default workflow for future AI agents.
+- **Context**: User wanted confidence that phase test cases are satisfied and requested AI docs to require agents to create tests first, then develop code until tests pass.
+- **Scope (files)**:
+  - `AI_MASTER.md`
+  - `AI_SYSTEM_PROMPT.md`
+  - `AI_RULES.md`
+  - `AI_CONTEXT.md`
+  - `DECISIONS.md`
+  - `README.md`
+  - `AGENT_SESSION_TEMPLATE.md`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+  - `package.json`
+  - `package-lock.json`
+  - `tsconfig.json`
+- **Actions**:
+  - Audited current phase evidence in `PROGRESS.md` and `AUDIT_LOG.md`; historical entries report passing lint/test gates for Phases 1-6.1.
+  - Ran the current full test suite to validate the accumulated repo state at 474 passing tests.
+  - Installed `@vitest/coverage-v8` because `npm run test:coverage` existed but could not run without the coverage provider.
+  - Added `coverage`, `dist`, and `node_modules` to `tsconfig.json` excludes so generated coverage assets do not break TypeScript lint.
+  - Updated AI governance docs to require TDD for behavioral work, including test-first expectations, coverage expectations by change type, and documented exceptions when automated tests are impractical.
+  - Updated `README.md` with the project TDD workflow and current coverage caveat.
+  - Recorded durable decision `DEC-011` for TDD as the default delivery workflow.
+- **TDD evidence**:
+  - This was documentation/process and test-infrastructure work; no product behavior was added.
+  - Verification-first audit exposed a real infrastructure failure: `npm run test:coverage` failed until `@vitest/coverage-v8` was installed.
+- **Verification**:
+  - `npm run lint` -> passed
+  - `npm test` -> passed (21 files, 474 tests)
+  - `npm run test:coverage -- --run` -> passed (21 files, 474 tests; coverage baseline: 44.1% statements, 39.01% branches, 41% functions, 46.36% lines)
+  - `npm run build` -> passed; Vite still reports the existing main chunk size advisory at ~1,048 kB minified / 280 kB gzip
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Run a coverage hardening pass for low-coverage UI/recovery surfaces, especially `Wizard.tsx`, `IncidentDisplay.tsx`, and `RecoveryActions.tsx`.
+  - **Risks**: Current tests pass, but coverage is not comprehensive across every file; npm reported 1 moderate audit vulnerability after installing the coverage provider.
+  - **Notes**: No `npm audit fix --force` was run because it may introduce unrelated breaking dependency changes.
+
+---
+
+## 2026-04-30 — Selected Provider Routing Fix
+
+- **SESSION_ID**: 2026-04-30T1406Z-provider-routing
+- **AGENT_NAME**: codex
+- **Goal**: Ensure the provider selected in Settings is the only provider used for runtime LLM requests across the app.
+- **Context**: User requested that choosing an agent/provider such as Ollama or ChatGPT should make all app requests use that provider, not another provider.
+- **Scope (files)**:
+  - `src/services/geminiService.ts`
+  - `src/services/types/ILLMProvider.ts`
+  - `src/__tests__/services/geminiService.routing.test.ts`
+  - `AI_CONTEXT.md`
+  - `DECISIONS.md`
+  - `README.md`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added provider-routing tests for `geminiService` before changing production code.
+  - Confirmed the failing behavior: when ChatGPT was selected and `runPrompt()` received no model, the shared service still passed Gemini's default model (`gemini-3.1-pro-preview`) to ChatGPT.
+  - Removed the Gemini-specific default model from shared `runPrompt` delegation.
+  - Updated `ILLMProvider.runPrompt` to accept an optional model so each selected provider can apply its own default.
+  - Documented the selected-provider routing invariant in `AI_CONTEXT.md`, `DECISIONS.md`, and `README.md`.
+- **TDD evidence**:
+  - Added `src/__tests__/services/geminiService.routing.test.ts` first.
+  - Targeted test failed as expected before the fix with `chatgpt:gemini-3.1-pro-preview` instead of `chatgpt:chatgpt-default-model`.
+  - Targeted test passed after the service-layer fix.
+- **Verification**:
+  - `npm run lint` -> passed
+  - `npm test` -> passed (22 files, 477 tests)
+  - `npm run test:coverage -- --run` -> passed (22 files, 477 tests; coverage baseline: 44.45% statements, 38.92% branches, 42.43% functions, 46.71% lines)
+  - `npm run build` -> passed; Vite still reports the existing main chunk size advisory at ~1,048 kB minified / 280 kB gzip
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Coverage hardening for low-coverage UI/recovery components remains the best next reliability task.
+  - **Risks**: UI still passes explicit model names for many prompt runs; this fix covers the shared-service fallback path and ensures provider defaults stay provider-owned.
+  - **Notes**: `geminiService.ts` remains historically named but routes all selected providers.
+
+---
+
+## 2026-05-01 — UI/Recovery Coverage Hardening Slice
+
+- **SESSION_ID**: 2026-05-01T0006+0530-ui-recovery-coverage
+- **AGENT_NAME**: codex
+- **Goal**: Follow the `AI_MASTER.md` handoff lead by improving coverage for low-covered UI/recovery surfaces.
+- **Context**: `SCRATCHPAD.md` had no active task and `PROGRESS.md` identified `IncidentDisplay.tsx`, `RecoveryActions.tsx`, and `Wizard.tsx` as the next coverage-hardening area.
+- **Scope (files)**:
+  - `src/__tests__/components/RecoveryActions.test.tsx`
+  - `src/__tests__/components/IncidentDisplay.test.tsx`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added direct component coverage for the `RecoveryActions` recovery matrix across retry, rate-limit, auth, timeout, network, provider-error, and malformed-request paths.
+  - Added direct component coverage for `IncidentDisplay` idle/loading states, error classification display, close handling, recovery action rendering, and retryable provider-log polling.
+  - Left production code unchanged because the coverage pass did not expose a behavior defect.
+- **TDD evidence**:
+  - This was a test-hardening task, so the primary change was adding tests around existing behavior before any production edits.
+  - A failing-first production cycle was not applicable because no behavior change was intended and no defect was found.
+- **Verification**:
+  - `npm test -- --run src/__tests__/components/RecoveryActions.test.tsx src/__tests__/components/IncidentDisplay.test.tsx` -> passed (2 files, 15 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (24 files, 492 tests)
+  - `npm run test:coverage -- --run` -> passed (24 files, 492 tests; 49.53% statements, 43.67% branches, 47.07% functions, 52% lines)
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue coverage hardening in `Wizard.tsx`, especially recovery/error workflows and modal orchestration.
+  - **Risks**: Overall coverage is improved but still not comprehensive; `Wizard.tsx` remains the largest low-coverage UI surface.
+  - **Notes**: `IncidentDisplay.tsx` now reports 100% statements/lines and `RecoveryActions.tsx` reports 86% statements/lines in the coverage output.
+
+---
+
+## 2026-05-01 — Wizard Recovery Coverage Slice
+
+- **SESSION_ID**: 2026-05-01T0011+0530-wizard-recovery-coverage
+- **AGENT_NAME**: codex
+- **Goal**: Continue the next listed coverage-hardening work one safe slice at a time.
+- **Context**: User asked to proceed through the listed next work carefully and avoid reliability regressions. The next lead was `Wizard.tsx` coverage around recovery/error workflows.
+- **Scope (files)**:
+  - `src/__tests__/components/Wizard.test.tsx`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added a mocked `IncidentDisplay` in `Wizard.test.tsx` so Wizard recovery state and callbacks can be tested without animation or child-component coupling.
+  - Added coverage for provider initialization failure followed by retry success.
+  - Added coverage for analysis failure followed by retry success.
+  - Added coverage for variations generation failure followed by retry success.
+  - Left production code unchanged because the tests passed against existing behavior.
+- **TDD evidence**:
+  - This was a test-hardening task, so tests were the implementation artifact.
+  - A failing-first production cycle was not applicable because no behavior change was intended and no defect was found.
+- **Verification**:
+  - `npm test -- --run src/__tests__/components/Wizard.test.tsx` -> passed (1 file, 24 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (24 files, 495 tests)
+  - `npm run test:coverage -- --run` -> passed (24 files, 495 tests; 54.1% statements, 46.82% branches, 50.73% functions, 56.78% lines)
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue `Wizard.tsx` coverage hardening for modal orchestration, settings save/validation errors, and battle recovery paths.
+  - **Risks**: `Wizard.tsx` remains a large low-coverage surface even after this improvement; keep adding tests in narrow slices.
+  - **Notes**: Coverage output shows `Wizard.tsx` improved to 27.81% statements and 30.41% lines.
+
+---
+
+## 2026-05-01 — Wizard Modal Orchestration Coverage Slice
+
+- **SESSION_ID**: 2026-05-01T0013+0530-wizard-modal-coverage
+- **AGENT_NAME**: codex
+- **Goal**: Continue Wizard coverage hardening with another narrow, reliable slice.
+- **Context**: After recovery retry paths were covered, the next low-risk Wizard area was modal orchestration.
+- **Scope (files)**:
+  - `src/__tests__/components/Wizard.test.tsx`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added a mocked `CompressionServiceModal` in `Wizard.test.tsx` so the test verifies Wizard's open/close wiring without coupling to modal internals.
+  - Added coverage for opening the standalone compression modal from the header `COMPRESS` button.
+  - Added coverage for closing the modal through its `onClose` callback.
+  - Left production code unchanged because the behavior already worked.
+- **TDD evidence**:
+  - This was a test-hardening task, so tests were the implementation artifact.
+  - A failing-first production cycle was not applicable because no behavior change was intended and no defect was found.
+- **Verification**:
+  - `npm test -- --run src/__tests__/components/Wizard.test.tsx` -> passed (1 file, 25 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (24 files, 496 tests)
+  - `npm run test:coverage -- --run` -> passed (24 files, 496 tests; 54.33% statements, 46.89% branches, 51.7% functions, 56.97% lines)
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue `Wizard.tsx` coverage hardening for settings save/validation errors and battle recovery paths.
+  - **Risks**: `Wizard.tsx` is still broad and stateful; keep future tests focused and use child mocks where that reduces coupling.
+  - **Notes**: Coverage output shows `Wizard.tsx` at 28.47% statements and 30.97% lines.
+
+---
+
+## 2026-05-01 — Wizard Settings Error Coverage Slice
+
+- **SESSION_ID**: 2026-05-01T0018+0530-wizard-settings-coverage
+- **AGENT_NAME**: codex
+- **Goal**: Continue Wizard coverage hardening with focused settings error coverage.
+- **Context**: User asked to proceed one by one while keeping reliability strict. After modal orchestration, settings validation/save errors were the next safe Wizard surface.
+- **Scope (files)**:
+  - `src/__tests__/components/Wizard.test.tsx`
+  - `PROGRESS.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added coverage for provider validation failure messaging in Settings.
+  - Added coverage for missing ChatGPT API key guard when saving provider settings.
+  - Added coverage for provider reinitialization failure during Save & Apply.
+  - Left production code unchanged because existing behavior was correct.
+- **TDD evidence**:
+  - This was a test-hardening task, so tests were the implementation artifact.
+  - Targeted test initially exposed duplicated error text in both the settings overlay and underlying page; assertions were adjusted to reflect existing UI behavior rather than changing production code.
+- **Verification**:
+  - `npm test -- --run src/__tests__/components/Wizard.test.tsx` -> passed (1 file, 28 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (24 files, 499 tests)
+  - `npm run test:coverage -- --run` -> passed (24 files, 499 tests; 56.24% statements, 49.68% branches, 53.17% functions, 59.01% lines)
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue `Wizard.tsx` coverage hardening for battle recovery paths.
+  - **Risks**: `Wizard.tsx` remains broad; battle tests should mock provider/judge calls carefully and avoid production logic changes unless a real defect appears.
+  - **Notes**: Coverage output shows `Wizard.tsx` at 33.94% statements and 36.94% lines.
+
+---
+
+## 2026-05-01 — Wizard Battle Recovery Coverage Slice
+
+- **SESSION_ID**: 2026-05-01T0020+0530-wizard-battle-coverage
+- **AGENT_NAME**: codex
+- **Goal**: Complete the next Wizard coverage-hardening lead with a focused battle recovery test.
+- **Context**: After settings error coverage, battle recovery was the remaining listed Wizard coverage slice before moving back to Phase 6.2 or later phases.
+- **Scope (files)**:
+  - `src/__tests__/components/Wizard.test.tsx`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added coverage for generating variations, selecting two prompts for the A/B arena, opening the battle modal, and starting a fight.
+  - Mocked the first battle provider call to fail and verified the battle recovery UI appears.
+  - Retried the battle and verified successful provider outputs lead to a judge verdict.
+  - Left production code unchanged because existing behavior was correct.
+- **TDD evidence**:
+  - This was a test-hardening task, so tests were the implementation artifact.
+  - Targeted Wizard test passed after adding the battle recovery scenario; no production fix was needed.
+- **Verification**:
+  - `npm test -- --run src/__tests__/components/Wizard.test.tsx` -> passed (1 file, 29 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (24 files, 500 tests)
+  - `npm run test:coverage -- --run` -> passed (24 files, 500 tests; 59.42% statements, 52.76% branches, 55.85% functions, 62.26% lines)
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Move to Phase 6.2 performance work, starting with provider SDK/manual chunk investigation, or choose Phase 7 offline-first if product priority changes.
+  - **Risks**: Coverage is much improved but still not comprehensive; remaining lower-coverage areas include provider implementations and some modal internals.
+  - **Notes**: Coverage output shows `Wizard.tsx` at 43.04% statements and 46.45% lines.
+
+---
+
+## 2026-05-01 — Phase 6.2: Manual Chunk Bundle Optimization
+
+- **SESSION_ID**: 2026-05-01T0026+0530-manual-chunks
+- **AGENT_NAME**: codex
+- **Goal**: Continue the next phase from `AI_MASTER.md`/`PROGRESS.md` by reducing the production bundle size with explicit chunking.
+- **Context**: `SCRATCHPAD.md` had no active task and `PROGRESS.md` listed Phase 6.2 performance work, starting with provider SDK/manual chunk investigation. Baseline build emitted a 1,047.91 kB minified / 280.44 kB gzip main chunk with Vite's chunk size warning.
+- **Scope (files)**:
+  - `vite.config.ts`
+  - `src/__tests__/config/viteConfig.test.ts`
+  - `README.md`
+  - `AI_CONTEXT.md`
+  - `DECISIONS.md`
+  - `PROGRESS.md`
+  - `SCRATCHPAD.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added an exported `manualChunks()` helper in `vite.config.ts`.
+  - Split provider SDKs into stable vendor chunks: `vendor-google-genai`, `vendor-openai`, and `vendor-anthropic`.
+  - Split shared runtime libraries into stable vendor chunks: `vendor-react`, `vendor-motion`, `vendor-icons`, and `vendor-crypto`.
+  - Wired the chunk policy into `build.rollupOptions.output.manualChunks`.
+  - Documented the new bundle policy in developer and agent-facing docs.
+- **TDD evidence**:
+  - Added `src/__tests__/config/viteConfig.test.ts` before implementation.
+  - Targeted test failed first with `TypeError: manualChunks is not a function`.
+  - Added runtime-library chunk expectations next; targeted test failed first with `expected undefined to be 'vendor-react'`.
+  - Implemented the smallest Vite config changes until the targeted config tests passed.
+- **Verification**:
+  - `npm test -- --run src/__tests__/config/viteConfig.test.ts` -> passed (1 file, 3 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (25 files, 503 tests)
+  - `npm run test:coverage -- --run` -> passed (25 files, 503 tests; 59.42% statements, 52.76% branches, 55.85% functions, 62.26% lines)
+  - `npm run build` -> passed; no Vite chunk size warning; main chunk now 157.25 kB minified / 36.88 kB gzip
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue Phase 6.3 performance work with response caching plus explicit refresh, route/component profiling, or investigation into dynamically loading provider implementations only after provider selection.
+  - **Risks**: Manual chunks improve emitted bundle shape but static imports still mean some vendor chunks may be preloaded by the app entry; measure real startup/network behavior before deeper optimization.
+  - **Notes**: Current build emits separate modal chunks plus named vendor chunks and keeps the main app chunk below Vite's warning threshold.
+
+---
+
+## 2026-05-01 — Phase 6.3: Prompt Response Caching with Explicit Refresh
+
+- **SESSION_ID**: 2026-05-01T0031+0530-prompt-response-cache
+- **AGENT_NAME**: codex
+- **Goal**: Continue the next performance phase by reducing repeated live prompt test calls while preserving explicit user control for fresh provider responses.
+- **Context**: Phase 6.2 manual chunking was complete. The next handoff listed response caching with explicit refresh as a Phase 6.3 performance candidate.
+- **Scope (files)**:
+  - `src/services/utils/promptResponseCache.ts`
+  - `src/__tests__/utils/promptResponseCache.test.ts`
+  - `src/components/Wizard.tsx`
+  - `src/__tests__/components/Wizard.test.tsx`
+  - `README.md`
+  - `AI_CONTEXT.md`
+  - `DECISIONS.md`
+  - `PROGRESS.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added a session-scoped prompt response cache keyed by provider, model, and resolved prompt text.
+  - Wired `VariationCard` live prompt tests to return cached output for repeated identical runs.
+  - Added a visible `Cached response` badge when reused output is shown.
+  - Added a `REFRESH` action that bypasses cache and calls the active provider through `geminiService.runPrompt`.
+  - Documented the runtime cache behavior and recorded `DEC-014`.
+- **TDD evidence**:
+  - Added `src/__tests__/utils/promptResponseCache.test.ts` and Wizard cache/refresh component coverage before implementation.
+  - Targeted tests first failed because `../../services/utils/promptResponseCache` did not exist.
+  - After implementation, the targeted tests passed and verified both cache reuse and explicit refresh.
+- **Verification**:
+  - `npm test -- --run src/__tests__/utils/promptResponseCache.test.ts src/__tests__/components/Wizard.test.tsx` -> passed (2 files, 33 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (26 files, 507 tests)
+  - `npm run test:coverage -- --run` -> passed (26 files, 507 tests; 60.99% statements, 54.14% branches, 57.44% functions, 63.68% lines)
+  - `npm run build` -> passed; no Vite chunk size warning; main chunk 158.92 kB minified / 37.38 kB gzip
+  - `npm run check:continuity` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue Phase 6.4 with route/component profiling, provider SDK dynamic loading investigation, or a deliberate cache policy for battle runs.
+  - **Risks**: Cache is intentionally session-scoped and only covers live prompt tests; battle arena runs still call providers fresh each time.
+  - **Notes**: Provider routing remains through `geminiService.runPrompt`; no provider SDK calls were added to UI.
+
+---
+
+## 2026-05-01 — Phase 6.4: Provider SDK Dynamic Loading
+
+- **SESSION_ID**: 2026-05-01T0035+0530-provider-sdk-dynamic-loading
+- **AGENT_NAME**: codex
+- **Goal**: Continue Phase 6 performance work by preventing cloud provider SDK chunks from being preloaded on the initial app entry.
+- **Context**: Phase 6.2 split provider SDKs into manual chunks, but static provider imports still left SDK chunks in the entry dependency graph. Phase 6.4 targeted dynamic SDK loading while preserving provider abstraction boundaries.
+- **Scope (files)**:
+  - `src/services/providers/geminiProvider.ts`
+  - `src/services/providers/chatgptProvider.ts`
+  - `src/services/providers/claudeProvider.ts`
+  - `src/services/providers/grokProvider.ts`
+  - `src/__tests__/providers/providerSdkLoading.test.ts`
+  - `README.md`
+  - `AI_CONTEXT.md`
+  - `DECISIONS.md`
+  - `PROGRESS.md`
+  - `AUDIT_LOG.md`
+- **Actions**:
+  - Added an architecture regression test that forbids static imports of `@google/genai`, `openai`, and `@anthropic-ai/sdk` in cloud provider modules.
+  - Replaced top-level SDK imports with dynamic imports inside provider implementations.
+  - Added lazy client initialization for Gemini, ChatGPT/OpenAI, Claude/Anthropic, and Grok/xAI providers.
+  - Preserved the synchronous `initializeProvider` contract and the existing provider factory shape.
+  - Verified production `dist/index.html` modulepreloads shared runtime chunks only, not provider SDK chunks.
+- **TDD evidence**:
+  - Added `src/__tests__/providers/providerSdkLoading.test.ts` before implementation.
+  - Targeted test failed first because `geminiProvider.ts` still statically imported `@google/genai`.
+  - After implementation, the targeted architecture test and full provider test suite passed.
+- **Verification**:
+  - `npm test -- --run src/__tests__/providers/providerSdkLoading.test.ts` -> passed
+  - `npm test -- --run src/__tests__/providers` -> passed (7 files, 107 tests)
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (27 files, 508 tests)
+  - `npm run test:coverage -- --run` -> passed (27 files, 508 tests; 61.05% statements, 54.12% branches, 57.54% functions, 63.66% lines)
+  - `npm run build` -> passed; no Vite chunk size warning; main chunk 159.62 kB minified / 37.56 kB gzip; initial HTML does not modulepreload provider SDK chunks
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Continue Phase 6.5 with route/component profiling, a deliberate battle-run cache policy, or selected-provider-only preload hints.
+  - **Risks**: SDK chunks are still listed in Vite's dynamic import dependency map and will load when provider methods run; this is intended. Existing provider tests shim clients directly and remain green.
+  - **Notes**: Provider routing remains centralized through `geminiService`/`providerFactory`; no UI code imports provider SDKs.
+
+---

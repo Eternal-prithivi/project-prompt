@@ -63,7 +63,7 @@ export async function generateExamples(components: PromptComponents): Promise<st
 
 export async function runPrompt(
   promptText: string,
-  model: string = 'gemini-3.1-pro-preview'
+  model?: string
 ): Promise<string> {
   return getProvider().runPrompt(promptText, model);
 }
@@ -81,4 +81,3 @@ export async function judgeArenaOutputs(
 ): Promise<JudgeVerdict> {
   return getProvider().judgeArenaOutputs(components, promptA, outA, promptB, outB);
 }
-

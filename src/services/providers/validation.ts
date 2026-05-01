@@ -114,7 +114,7 @@ export async function validateOllamaConnection(url: string): Promise<{ valid: bo
     }
 
     return { valid: true };
-  } catch (e: any) {
+  } catch {
     return {
       valid: false,
       error: `Cannot connect to Ollama. Is it running? Try: ollama serve`,

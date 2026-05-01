@@ -1,21 +1,31 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, Sparkles, Send, RefreshCw, Copy, Check, ChevronLeft, Download, History, Play, Wand2, X, Terminal, FileJson, Library, FileCode2, Target, BarChart2, Swords, Coins, Minimize2, Settings2, ShieldAlert, Info } from 'lucide-react';
+import { ArrowRight, Sparkles, RefreshCw, Copy, Check, ChevronLeft, Play, Wand2, X, Terminal, Library, FileCode2, Target, BarChart2, Swords, Coins, Minimize2, Settings2, ShieldAlert, Info } from 'lucide-react';
 import { analyzePrompt, generateVariations, magicRefine, runPrompt, generateExamples, integrateAnswers, compressPrompt, judgeArenaOutputs, initializeProvider } from '../services/geminiService';
 import { PromptComponents, PromptVariation, WizardStep, HistoryItem, JudgeVerdict } from '../types';
 import { Button } from './ui/Button';
 import { Card, Input, Textarea } from './ui/Inputs';
 import { cn } from '../lib/utils';
-import { getCredentials, saveCredentials, credentialsToConfig, StoredCredentials, isCredentialsLocked, unlockCredentials, setCredentialPassword } from '../services/credentialStore';
+import { getCredentials, saveCredentials, credentialsToConfig, StoredCredentials, isCredentialsLocked, unlockCredentials, setCredentialPassword, hasCredentialPassword } from '../services/credentialStore';
 import { validateGeminiKey, validateDeepseekKey, validateOllamaConnection, getOllamaModels } from '../services/providers/validation';
-import { ProviderConfig } from '../services/types/ILLMProvider';
 import { safeErrorMessage } from '../services/utils/errors';
 import { IncidentDisplay } from './IncidentDisplay';
-import { OllamaSetupModal } from './OllamaSetupModal';
-import { ModelGallery } from './ModelGallery';
-import { CompressionServiceModal } from './CompressionServiceModal';
 import { getSystemInfo } from '../services/systemInfo';
 import { savePreservedState, getPreservedState, clearPreservedState, hasPreservedState, restorePreservedState } from '../services/utils/statePreservation';
+import { cachePromptResponse, getCachedPromptResponse } from '../services/utils/promptResponseCache';
+import { cacheCompression, getCachedCompression } from '../services/utils/compressionCache';
+import { calculateTokenSavings } from '../services/utils/compressionCost';
+import { validateKeywordPreservation } from '../services/utils/keywordExtractor';
+
+const OllamaSetupModal = React.lazy(() =>
+  import('./OllamaSetupModal').then((module) => ({ default: module.OllamaSetupModal }))
+);
+const ModelGallery = React.lazy(() =>
+  import('./ModelGallery').then((module) => ({ default: module.ModelGallery }))
+);
+const CompressionServiceModal = React.lazy(() =>
+  import('./CompressionServiceModal').then((module) => ({ default: module.CompressionServiceModal }))
+);
 
 const MetricBar = ({ label, score }: { label: string, score: number }) => (
   <div className="bg-black/20 border border-white/5 p-3 rounded-xl flex flex-col items-center shadow-inner">
@@ -34,7 +44,7 @@ const downloadBlob = (content: string, filename: string, type: string) => {
   a.download = filename; a.click(); URL.revokeObjectURL(url);
 };
 
-const VariationCard: React.FC<{
+export const VariationCard: React.FC<{
   result: PromptVariation,
   onUpdateContent: (id: string, newContent: string) => void,
   onToggleArena: (id: string) => void,
@@ -58,6 +68,7 @@ const VariationCard: React.FC<{
   const [varValues, setVarValues] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testError, setTestError] = useState<Error | null>(null);
+  const [testResultFromCache, setTestResultFromCache] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -153,11 +164,32 @@ const VariationCard: React.FC<{
   const estimatedTokens = Math.ceil(resolvedContent.length / 4);
   const estimatedCostPer10k = ((estimatedTokens / 10000) * 0.015).toFixed(4); // approx
 
-  const handleTest = async () => {
+  const getTestProviderKey = () => selectedEngine === 'local' ? 'ollama' : selectedEngine;
+
+  const handleTest = async (options: { forceRefresh?: boolean } = {}) => {
     setIsTesting(true);
     setTestError(null);
+    setTestResultFromCache(false);
     setTestResult(`Connecting to ${testModel}...`);
     try {
+      const cacheKey = {
+        provider: getTestProviderKey(),
+        model: testModel,
+        prompt: resolvedContent,
+      };
+
+      if (!options.forceRefresh) {
+        const cached = getCachedPromptResponse(cacheKey);
+        if (cached) {
+          if (isMountedRef.current) {
+            setTestResult(cached.response);
+            setTestError(null);
+            setTestResultFromCache(true);
+          }
+          return;
+        }
+      }
+
       if (selectedEngine === 'local') {
         const health = await validateOllamaConnection(ollamaUrl || 'http://localhost:11434');
         if (!health.valid) {
@@ -165,6 +197,10 @@ const VariationCard: React.FC<{
         }
       }
       const res = await runPrompt(resolvedContent, testModel);
+      cachePromptResponse({
+        ...cacheKey,
+        response: res,
+      });
       if (isMountedRef.current) {
         setTestResult(res);
         setTestError(null);
@@ -173,6 +209,7 @@ const VariationCard: React.FC<{
       if (isMountedRef.current) {
         setTestError(e);
         setTestResult(null);
+        setTestResultFromCache(false);
       }
     } finally {
       if (isMountedRef.current) setIsTesting(false);
@@ -189,7 +226,6 @@ const VariationCard: React.FC<{
     setCompressionResult(null);
     try {
       // Check cache first
-      const { cacheCompression, getCachedCompression } = require('../services/utils/compressionCache');
       const cached = getCachedCompression(result.content, compressionMode);
 
       let compressed = '';
@@ -203,9 +239,7 @@ const VariationCard: React.FC<{
       }
 
       // Calculate metrics
-      const { calculateTokenSavings, calculateCompressionROI } = require('../services/utils/compressionCost');
       const savings = calculateTokenSavings(result.content, compressed);
-      const { validateKeywordPreservation } = require('../services/utils/keywordExtractor');
       const validation = validateKeywordPreservation(result.content, compressed);
 
       // Validate quality in safe mode
@@ -270,19 +304,19 @@ const VariationCard: React.FC<{
   const exportPY = () => {
     let code = '';
     if (selectedEngine === 'local') {
-      code = `import requests\nimport json\n\nresponse = requests.post(\n    '${ollamaUrl || 'http://localhost:11434'}/api/chat',\n    json={\n        'model': '${testModel}',\n        'messages': [{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\"\"\"')}"""}],\n        'stream': False,\n    },\n)\ndata = response.json()\nprint(data['message']['content'])`;
+      code = `import requests\nimport json\n\nresponse = requests.post(\n    '${ollamaUrl || 'http://localhost:11434'}/api/chat',\n    json={\n        'model': '${testModel}',\n        'messages': [{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\\"\\"\\"')}"""}],\n        'stream': False,\n    },\n)\ndata = response.json()\nprint(data['message']['content'])`;
     } else if (selectedEngine === 'gemini') {
-      code = `import os\nimport google.generativeai as genai\n\ngenai.configure(api_key=os.getenv('GEMINI_API_KEY'))\nmodel = genai.GenerativeModel('${testModel}')\n\nresponse = model.generate_content("""${resolvedContent.replace(/"""/g, '\"\"\"')}""")\nprint(response.text)`;
+      code = `import os\nimport google.generativeai as genai\n\ngenai.configure(api_key=os.getenv('GEMINI_API_KEY'))\nmodel = genai.GenerativeModel('${testModel}')\n\nresponse = model.generate_content("""${resolvedContent.replace(/"""/g, '\\"\\"\\"')}""")\nprint(response.text)`;
     } else if (selectedEngine === 'chatgpt') {
-      code = `import os\nfrom openai import OpenAI\n\nclient = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))\n\nresponse = client.chat.completions.create(\n    model='${testModel}',\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\"\"\"')}"""}],\n)\nprint(response.choices[0].message.content)`;
+      code = `import os\nfrom openai import OpenAI\n\nclient = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))\n\nresponse = client.chat.completions.create(\n    model='${testModel}',\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\\"\\"\\"')}"""}],\n)\nprint(response.choices[0].message.content)`;
     } else if (selectedEngine === 'claude') {
-      code = `import os\nfrom anthropic import Anthropic\n\nclient = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))\n\nresponse = client.messages.create(\n    model='${testModel}',\n    max_tokens=1024,\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\"\"\"')}"""}],\n)\nprint(response.content[0].text)`;
+      code = `import os\nfrom anthropic import Anthropic\n\nclient = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))\n\nresponse = client.messages.create(\n    model='${testModel}',\n    max_tokens=1024,\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\\"\\"\\"')}"""}],\n)\nprint(response.content[0].text)`;
     } else if (selectedEngine === 'deepseek') {
-      code = `import os\nfrom openai import OpenAI\n\nclient = OpenAI(\n    api_key=os.getenv('DEEPSEEK_API_KEY'),\n    base_url='https://api.deepseek.com',\n)\n\nresponse = client.chat.completions.create(\n    model='${testModel}',\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\"\"\"')}"""}],\n)\nprint(response.choices[0].message.content)`;
+      code = `import os\nfrom openai import OpenAI\n\nclient = OpenAI(\n    api_key=os.getenv('DEEPSEEK_API_KEY'),\n    base_url='https://api.deepseek.com',\n)\n\nresponse = client.chat.completions.create(\n    model='${testModel}',\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\\"\\"\\"')}"""}],\n)\nprint(response.choices[0].message.content)`;
     } else if (selectedEngine === 'grok') {
-      code = `import os\nfrom openai import OpenAI\n\nclient = OpenAI(\n    api_key=os.getenv('GROK_API_KEY'),\n    base_url='https://api.x.ai/v1',\n)\n\nresponse = client.chat.completions.create(\n    model='${testModel}',\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\"\"\"')}"""}],\n)\nprint(response.choices[0].message.content)`;
+      code = `import os\nfrom openai import OpenAI\n\nclient = OpenAI(\n    api_key=os.getenv('GROK_API_KEY'),\n    base_url='https://api.x.ai/v1',\n)\n\nresponse = client.chat.completions.create(\n    model='${testModel}',\n    messages=[{'role': 'user', 'content': """${resolvedContent.replace(/"""/g, '\\"\\"\\"')}"""}],\n)\nprint(response.choices[0].message.content)`;
     } else {
-      code = `# Update with your provider endpoint and API key\n\nimport requests\n\nresponse = requests.post(\n    'your-endpoint',\n    json={'prompt': """${resolvedContent.replace(/"""/g, '\"\"\"')}"""},\n)\nprint(response.json())`;
+      code = `# Update with your provider endpoint and API key\n\nimport requests\n\nresponse = requests.post(\n    'your-endpoint',\n    json={'prompt': """${resolvedContent.replace(/"""/g, '\\"\\"\\"')}"""},\n)\nprint(response.json())`;
     }
     downloadBlob(code, `prompt_${result.type}.py`, 'text/x-python');
   };
@@ -408,7 +442,7 @@ const VariationCard: React.FC<{
                      ))}
                   </select>
                 </div>
-                <Button variant="secondary" onClick={handleTest} className="gap-2 border-indigo-500/30 text-indigo-300 shadow-indigo-500/10 shadow-lg h-10">
+                <Button variant="secondary" onClick={() => handleTest()} className="gap-2 border-indigo-500/30 text-indigo-300 shadow-indigo-500/10 shadow-lg h-10">
                   <Play className="w-4 h-4 fill-current"/> Live Resilience Test
                 </Button>
             </div>
@@ -416,7 +450,37 @@ const VariationCard: React.FC<{
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/10 overflow-hidden shadow-emerald-500/5 shadow-2xl">
                 <div className="px-4 py-3 bg-emerald-500/10 border-b border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
                   <h4 className="flex items-center gap-2 text-emerald-400 font-mono text-xs uppercase tracking-widest"><Terminal className="w-4 h-4"/> Playground Out ({getEngineLabel()})</h4>
-                  {isTesting ? <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin"/> : <Button variant="ghost" size="sm" onClick={()=>{setTestResult(null); setTestError(null);}} className="h-6 px-2 text-xs text-emerald-400/50 hover:text-emerald-400">CLEAR</Button>}
+                  {isTesting ? (
+                    <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin"/>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {testResultFromCache && (
+                        <span className="px-2 py-1 rounded border border-cyan-400/20 bg-cyan-400/10 text-[10px] font-mono uppercase tracking-widest text-cyan-300">
+                          Cached response
+                        </span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleTest({ forceRefresh: true })}
+                        className="h-6 px-2 text-xs text-emerald-400/50 hover:text-emerald-400"
+                      >
+                        REFRESH
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setTestResult(null);
+                          setTestError(null);
+                          setTestResultFromCache(false);
+                        }}
+                        className="h-6 px-2 text-xs text-emerald-400/50 hover:text-emerald-400"
+                      >
+                        CLEAR
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="p-6 font-sans text-sm text-emerald-50 leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto">
                   {testError ? (
@@ -425,10 +489,10 @@ const VariationCard: React.FC<{
                       error={testError}
                       showActions={true}
                       context="test"
-                      onRetry={handleTest}
+                      onRetry={() => handleTest()}
                       onSwitchModel={(model) => {
                         setTestModel(model);
-                        setTimeout(() => handleTest(), 100);
+                        setTimeout(() => handleTest({ forceRefresh: true }), 100);
                       }}
                       availableModels={getAvailableModels()}
                       onClose={() => {
@@ -480,6 +544,7 @@ const VariationCard: React.FC<{
                 </div>
                 <button
                   onClick={() => setCompressionResult(null)}
+                  aria-label="Close compression results"
                   className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                 >
                   <X className="w-5 h-5 text-white/60" />
@@ -678,7 +743,11 @@ export const Wizard = () => {
     // Load history
     const saved = localStorage.getItem('prompt_history');
     if (saved) {
-      try { setHistory(JSON.parse(saved)); } catch (e) {}
+      try {
+        setHistory(JSON.parse(saved));
+      } catch {
+        // Ignore malformed saved history and continue with an empty library.
+      }
     }
 
     // Load Ollama models
@@ -708,9 +777,22 @@ export const Wizard = () => {
       setInitError(null);
       const unlocked = unlockCredentials(credentialPassword);
       setCredentials(unlocked);
+      setSelectedEngine(unlocked.selectedEngine);
+      setApiKeys({
+        gemini: unlocked.geminiKey || '',
+        deepseek: unlocked.deepseekKey || '',
+        chatgpt: unlocked.chatgptKey || '',
+        claude: unlocked.claudeKey || '',
+        grok: unlocked.grokKey || '',
+      });
+      setOllamaUrl(unlocked.ollamaUrl);
+      setOllamaModel(unlocked.selectedModel);
       setIsCredsLocked(false);
       const config = credentialsToConfig(unlocked);
       initializeProvider(config);
+      if (unlocked.selectedEngine === 'local' && unlocked.ollamaUrl) {
+        loadOllamaModels(unlocked.ollamaUrl);
+      }
       setErrorMsg(null);
     } catch (e: any) {
       setInitError(e);
@@ -725,6 +807,20 @@ export const Wizard = () => {
     } catch (e) {
       console.warn('Could not load Ollama models:', e);
     }
+  };
+
+  const ensureCredentialPersistence = (missingPasswordMessage: string) => {
+    if (credentialPassword && credentialPassword.trim().length > 0) {
+      setCredentialPassword(credentialPassword);
+      return true;
+    }
+
+    if (hasCredentialPassword()) {
+      return true;
+    }
+
+    setErrorMsg(missingPasswordMessage);
+    return false;
   };
 
   const handleUpdateVariationContent = (id: string, newContent: string) => {
@@ -819,8 +915,8 @@ export const Wizard = () => {
         }
       }
 
-      if (credentialPassword && credentialPassword.trim().length > 0) {
-        setCredentialPassword(credentialPassword);
+      if (!ensureCredentialPersistence('Enter an encryption password before saving provider settings.')) {
+        return;
       }
 
       // Reinitialize provider first (so we don't persist broken settings)
@@ -1215,7 +1311,14 @@ export const Wizard = () => {
           <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed inset-y-0 right-0 w-full max-w-md glass-panel z-50 p-6 border-l border-white/10 overflow-y-auto">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-xl font-bold font-mono tracking-widest text-indigo-300">LIBRARY</h2>
-              <Button variant="ghost" size="sm" onClick={() => setIsHistoryOpen(false)}><X className="w-5 h-5"/></Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsHistoryOpen(false)}
+                aria-label="Close history library"
+              >
+                <X className="w-5 h-5"/>
+              </Button>
             </div>
             {history.length === 0 ? (
               <p className="text-white/40 text-center py-10 font-mono">No prompts saved yet.</p>
@@ -1240,43 +1343,55 @@ export const Wizard = () => {
         {renderBattleArena()}
       </AnimatePresence>
 
-      {/* Ollama Setup Modal */}
-      <OllamaSetupModal
-        isOpen={isOllamaSetupOpen}
-        onClose={() => setIsOllamaSetupOpen(false)}
-        onComplete={() => {
-          setSelectedEngine('local');
-          handleOllamaSetupComplete();
-        }}
-      />
+      <React.Suspense fallback={null}>
+        {/* Ollama Setup Modal */}
+        {isOllamaSetupOpen && (
+          <OllamaSetupModal
+            isOpen={isOllamaSetupOpen}
+            onClose={() => setIsOllamaSetupOpen(false)}
+            onComplete={() => {
+              setSelectedEngine('local');
+              handleOllamaSetupComplete();
+            }}
+          />
+        )}
 
-      {/* Model Gallery Modal */}
-      <ModelGallery
-        isOpen={isModelGalleryOpen}
-        onClose={() => setIsModelGalleryOpen(false)}
-        suggestedModel={suggestedModel}
-        onModelSelect={(modelName) => {
-          setOllamaModel(modelName);
-          // Immediately persist and reinitialize so the new model is used right away
-          try {
-            const newCreds = { ...credentials, selectedModel: modelName };
-            const config = credentialsToConfig(newCreds);
-            initializeProvider(config);
-            saveCredentials(newCreds);
-            setCredentials(newCreds);
-            setIsModelGalleryOpen(false);
-          } catch (e: any) {
-            setInitError(e);
-            setErrorMsg(`Failed to apply model: ${safeErrorMessage(e)}`);
-          }
-        }}
-      />
+        {/* Model Gallery Modal */}
+        {isModelGalleryOpen && (
+          <ModelGallery
+            isOpen={isModelGalleryOpen}
+            onClose={() => setIsModelGalleryOpen(false)}
+            suggestedModel={suggestedModel}
+            onModelSelect={(modelName) => {
+              setOllamaModel(modelName);
+              // Immediately persist and reinitialize so the new model is used right away
+              try {
+                const newCreds = { ...credentials, selectedModel: modelName };
+                const config = credentialsToConfig(newCreds);
+                initializeProvider(config);
+                setCredentials(newCreds);
+                if (ensureCredentialPersistence('Set an encryption password in Settings to persist the selected model after reload.')) {
+                  saveCredentials(newCreds);
+                } else {
+                  setErrorMsg('Model applied for this session only. Set an encryption password in Settings to persist it after reload.');
+                }
+                setIsModelGalleryOpen(false);
+              } catch (e: any) {
+                setInitError(e);
+                setErrorMsg(`Failed to apply model: ${safeErrorMessage(e)}`);
+              }
+            }}
+          />
+        )}
 
-      {/* Compression Service Modal */}
-      <CompressionServiceModal
-        isOpen={isCompressionServiceOpen}
-        onClose={() => setIsCompressionServiceOpen(false)}
-      />
+        {/* Compression Service Modal */}
+        {isCompressionServiceOpen && (
+          <CompressionServiceModal
+            isOpen={isCompressionServiceOpen}
+            onClose={() => setIsCompressionServiceOpen(false)}
+          />
+        )}
+      </React.Suspense>
 
       {/* Settings Overlay */}
       <AnimatePresence>
@@ -1285,7 +1400,14 @@ export const Wizard = () => {
             <div className="bg-[#0B0D17] border border-white/10 rounded-2xl w-full max-w-3xl shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden max-h-[90vh] overflow-y-auto">
                <header className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5 sticky top-0">
                  <h2 className="text-xl font-bold flex items-center gap-3"><Settings2 className="w-5 h-5"/> LLM Provider Settings</h2>
-                 <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(false)}><X className="w-5 h-5"/></Button>
+                 <Button
+                   variant="ghost"
+                   size="sm"
+                   onClick={() => setIsSettingsOpen(false)}
+                   aria-label="Close provider settings"
+                 >
+                   <X className="w-5 h-5"/>
+                 </Button>
                </header>
                <div className="p-8 space-y-8">
                   <div className="bg-black/30 border border-white/10 rounded-xl p-5">

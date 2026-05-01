@@ -139,3 +139,43 @@ undefined on non-Error objects.
 Ollama validation is isolated to local path. Model cache is lower urgency (nice-to-have).
 localStorage quota is edge case UX.
 **Reorder only if:** User explicitly reprioritizes.
+
+---
+
+## DEC-011 — Test-driven development is the default delivery workflow
+
+**Date:** 2026-04-30
+**Decision:** Feature, bug fix, and reliability work must be developed test-first by default. Agents should add or update relevant unit, component, provider, utility, or integration tests before production code, then implement the smallest change needed to pass those tests.
+**Why:** Prompt Architect is intended to be reliable across multiple providers, recovery flows, and prompt workflows. Test-first work prevents feature drift and gives future agents a deterministic safety net.
+**Exceptions:** Documentation-only changes and changes that cannot reasonably be automated may skip new tests, but the agent must document why in `AUDIT_LOG.md` and track any follow-up risk in `PROGRESS.md`.
+**Impact:** `AI_MASTER.md`, `AI_SYSTEM_PROMPT.md`, `AI_RULES.md`, `AI_CONTEXT.md`, `README.md`, and `AGENT_SESSION_TEMPLATE.md` should all reinforce TDD as a core agent workflow.
+
+---
+
+## DEC-012 — Selected provider owns request routing and default models
+
+**Date:** 2026-04-30
+**Decision:** The provider selected in Settings is the only provider that should receive runtime LLM requests. `geminiService.ts` remains the shared delegation layer, but it must not inject provider-specific default model names into cross-provider calls. If `runPrompt()` receives no model, the currently selected provider applies its own default.
+**Why:** A Gemini-specific default in the shared delegation layer can leak a Gemini model name into ChatGPT, Ollama, Claude, Grok, or DeepSeek requests, even though the selected provider is otherwise correct.
+**Impact:** Provider routing tests must cover delegation to the selected provider only, provider switching after reinitialization, and selected-provider defaults when no model is supplied.
+
+## DEC-013 — Production bundles use explicit vendor manual chunks
+
+**Date:** 2026-05-01
+**Decision:** Vite production builds must split heavyweight provider SDKs and shared runtime libraries into named manual chunks through `vite.config.ts`.
+**Why:** Provider SDKs and shared UI/runtime packages made the main app chunk exceed Vite's warning threshold. Explicit chunk names make bundle shape predictable and measurable.
+**Impact:** Keep provider SDK chunks (`vendor-google-genai`, `vendor-openai`, `vendor-anthropic`) and shared runtime chunks (`vendor-react`, `vendor-motion`, `vendor-icons`, `vendor-crypto`) covered by `src/__tests__/config/viteConfig.test.ts`.
+
+## DEC-014 — Live prompt tests use session-scoped response caching
+
+**Date:** 2026-05-01
+**Decision:** Live prompt test responses are cached in `sessionStorage` by provider, model, and resolved prompt text. Cached results are reused for identical test runs, and the result panel exposes an explicit refresh action to bypass the cache.
+**Why:** Re-testing unchanged prompt variations should not repeatedly spend latency or provider quota, but users still need a clear way to request a fresh model response.
+**Impact:** Cache logic belongs in `src/services/utils/promptResponseCache.ts`; UI flows must show when a reused result came from cache and must keep refresh behavior provider-routed through `geminiService.runPrompt`.
+
+## DEC-015 — Cloud provider SDKs load on provider use
+
+**Date:** 2026-05-01
+**Decision:** Gemini, OpenAI-compatible, and Anthropic SDK packages must be dynamically imported inside their provider implementations instead of statically imported at provider module load.
+**Why:** Manual chunks reduced bundle size, but static provider imports still made cloud SDK chunks eligible for entry preloading. Dynamic SDK imports keep initial HTML focused on shared runtime chunks and load provider SDK code only when a selected provider needs it.
+**Impact:** `GeminiProvider`, `ChatGPTProvider`, `ClaudeProvider`, and `GrokProvider` own lazy SDK client initialization. Keep `src/__tests__/providers/providerSdkLoading.test.ts` in place so static SDK imports do not return accidentally.

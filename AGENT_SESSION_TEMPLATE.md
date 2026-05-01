@@ -15,9 +15,13 @@ Copy/paste this template into `AUDIT_LOG.md` for every agent session.
 - **Actions**:
   - <action 1>
   - <action 2>
+- **TDD evidence**:
+  - <tests added/updated before implementation, or documented exception>
+  - <targeted failing test observed when practical>
 - **Verification**:
   - `npm run lint` -> <pass/fail + notes>
   - `npm test` -> <pass/fail + notes>
+  - `npm run test:coverage` -> <pass/fail/skipped + notes>
 - **Outcome**: <done / partial / blocked>
 - **Handoff**:
   - **Next step**: <exact next action>
@@ -30,4 +34,4 @@ Checklist for the agent before ending session:
 - [ ] `SCRATCHPAD.md` updated (or cleared if done)
 - [ ] `PROGRESS.md` updated
 - [ ] `AUDIT_LOG.md` entry appended
-
+- [ ] TDD evidence or exception documented

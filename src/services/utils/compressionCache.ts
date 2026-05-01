@@ -51,6 +51,10 @@ function hashPrompt(prompt: string): string {
   return `${Math.abs(hash)}`;
 }
 
+function getCacheKey(original: string, mode: 'fast' | 'safe'): string {
+  return `${mode}:${hashPrompt(original)}`;
+}
+
 /**
  * Cache a compression result
  */
@@ -62,7 +66,7 @@ export function cacheCompression(
 ): void {
   try {
     const cache = getCache();
-    const key = hashPrompt(original);
+    const key = getCacheKey(original, mode);
 
     // Enforce size limit (FIFO)
     const keys = Object.keys(cache);
@@ -95,13 +99,11 @@ export function getCachedCompression(
 ): CachedCompression | null {
   try {
     const cache = getCache();
-    const key = hashPrompt(original);
-    const result = cache[key];
+    const result = mode
+      ? cache[getCacheKey(original, mode)]
+      : cache[getCacheKey(original, 'fast')] ?? cache[getCacheKey(original, 'safe')];
 
     if (!result) return null;
-
-    // If mode specified, only return if modes match
-    if (mode && result.mode !== mode) return null;
 
     return result;
   } catch (e) {
@@ -113,12 +115,10 @@ export function getCachedCompression(
 /**
  * Check if a prompt is cached
  */
-export function isCached(original: string): boolean {
+export function isCached(original: string, mode?: 'fast' | 'safe'): boolean {
   try {
-    const cache = getCache();
-    const key = hashPrompt(original);
-    return key in cache;
-  } catch (e) {
+    return getCachedCompression(original, mode) !== null;
+  } catch {
     return false;
   }
 }
@@ -133,7 +133,7 @@ export function getCacheStats(): { total: number; hitRate: number } {
       total: Object.keys(cache).length,
       hitRate: 0, // Would need to track hits separately
     };
-  } catch (e) {
+  } catch {
     return { total: 0, hitRate: 0 };
   }
 }

@@ -6,8 +6,7 @@
  * Implements ILLMProvider interface using Google's Gemini API
  */
 
-import { GoogleGenAI, Type } from '@google/genai';
-import { ILLMProvider, ProviderConfig } from '../types/ILLMProvider';
+import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { timeoutPromise } from '../utils/timeout';
 import { retry } from '../utils/retry';
@@ -18,16 +17,37 @@ type ProviderTimeoutOptions = {
   timeoutMs?: number;
 };
 
+type GeminiSdk = typeof import('@google/genai');
+type GeminiClient = InstanceType<GeminiSdk['GoogleGenAI']>;
+
+let geminiSdkPromise: Promise<GeminiSdk> | null = null;
+
+function loadGeminiSdk(): Promise<GeminiSdk> {
+  geminiSdkPromise ??= import('@google/genai');
+  return geminiSdkPromise;
+}
+
 export class GeminiProvider implements ILLMProvider {
-  private aiClient: GoogleGenAI;
+  private apiKey: string;
+  private aiClient: GeminiClient | null = null;
   private timeoutMs: number;
 
   constructor(apiKey: string, opts: ProviderTimeoutOptions = {}) {
     if (!apiKey || apiKey === 'undefined') {
       throw new Error('Gemini API key is required. Please provide a valid API key.');
     }
+    this.apiKey = apiKey;
     this.timeoutMs = opts.timeoutMs ?? 30000;
-    this.aiClient = new GoogleGenAI({ apiKey });
+  }
+
+  private async getClient(): Promise<GeminiClient> {
+    if (this.aiClient) {
+      return this.aiClient;
+    }
+
+    const { GoogleGenAI } = await loadGeminiSdk();
+    this.aiClient = new GoogleGenAI({ apiKey: this.apiKey });
+    return this.aiClient;
   }
 
   /**
@@ -87,10 +107,12 @@ export class GeminiProvider implements ILLMProvider {
   }
 
   async analyzePrompt(input: string): Promise<PromptComponents> {
+    const client = await this.getClient();
+    const { Type } = await loadGeminiSdk();
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: `Analyze this basic prompt and extract or suggest these components: Role, Task, Context, Format, Constraints.
     ALSO, act as a Prompt Critic. Evaluate the original prompt out of 100 on clarity, context, constraints, and tone. Provide an overall score and a brief, blunt 1-sentence feedback.
@@ -139,6 +161,8 @@ export class GeminiProvider implements ILLMProvider {
   }
 
   async generateVariations(components: PromptComponents): Promise<PromptVariation[]> {
+    const client = await this.getClient();
+    const { Type } = await loadGeminiSdk();
     const customInstruction = components.customPersona
       ? `\n4. Custom: Write it specifically acting as a "${components.customPersona}".`
       : '';
@@ -146,7 +170,7 @@ export class GeminiProvider implements ILLMProvider {
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model: 'gemini-3.1-pro-preview',
             contents: `Generate world-class, highly structured prompt variations based on these components:
     Role: ${components.role}
@@ -194,10 +218,12 @@ export class GeminiProvider implements ILLMProvider {
   }
 
   async magicRefine(components: PromptComponents): Promise<PromptComponents> {
+    const client = await this.getClient();
+    const { Type } = await loadGeminiSdk();
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: `Act as an expert prompt engineer. Enhance and expand the missing details of this prompt structure.
     Keep the good parts, improve professional quality.
@@ -236,11 +262,13 @@ export class GeminiProvider implements ILLMProvider {
     components: PromptComponents,
     qas: { q: string; a: string }[]
   ): Promise<PromptComponents> {
+    const client = await this.getClient();
+    const { Type } = await loadGeminiSdk();
     const qaString = qas.map((qa) => `Question: ${qa.q}\nUser Answer: ${qa.a}`).join('\n\n');
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: `Act as an expert prompt engineer. You previously created this prompt structure:
     Role: ${components.role}
@@ -280,10 +308,11 @@ export class GeminiProvider implements ILLMProvider {
   }
 
   async generateExamples(components: PromptComponents): Promise<string> {
+    const client = await this.getClient();
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: `Based on this prompt goal, generate 2 highly relevant 'Few-Shot' examples (Input and Expected Output formats) to help guide a language model perfectly.
     Task: ${components.task}
@@ -305,10 +334,11 @@ export class GeminiProvider implements ILLMProvider {
     promptText: string,
     model: 'gemini-3.1-pro-preview' | 'gemini-3-flash-preview' = 'gemini-3.1-pro-preview'
   ): Promise<string> {
+    const client = await this.getClient();
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model,
             contents: promptText,
           }),
@@ -322,10 +352,11 @@ export class GeminiProvider implements ILLMProvider {
   }
 
   async compressPrompt(promptText: string): Promise<string> {
+    const client = await this.getClient();
     const response = await this.callWithRetry(
       () =>
         timeoutPromise(
-          this.aiClient.models.generateContent({
+          client.models.generateContent({
             model: 'gemini-3.1-pro-preview',
             contents: `You are an expert prompt compression algorithm. Compress the following prompt to use the ABSOLUTE MINIMUM NUMBER OF TOKENS without losing ANY constraints, semantic meaning, or required output formats.
     Use dense formatting (e.g. Markdown, extreme abbreviation of pleasantries, succinct lists). Maintain bracketed [VARIABLES] exactly as they are.
@@ -350,10 +381,12 @@ export class GeminiProvider implements ILLMProvider {
     outB: string
   ): Promise<JudgeVerdict> {
     try {
+      const client = await this.getClient();
+      const { Type } = await loadGeminiSdk();
       const response = await this.callWithRetry(
         () =>
           timeoutPromise(
-            this.aiClient.models.generateContent({
+            client.models.generateContent({
               model: 'gemini-3.1-pro-preview',
               contents: `You are an impartial, highly rigorous AI Prompt Judge. I will provide you with the overarching constraints and goals of a task, and two different pairs of (Prompt, Output).
       Your goal is to evaluate which Prompt produced an output that better satisfied the requirements and achieved the highest quality formatting and tone.

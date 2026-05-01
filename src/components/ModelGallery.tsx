@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from './ui/Button';
 
 interface Model {
   name: string;
@@ -243,6 +242,7 @@ export const ModelGallery: React.FC<ModelGalleryProps> = ({
             </div>
             <button
               onClick={onClose}
+              aria-label="Close model gallery"
               className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
             >
               ×

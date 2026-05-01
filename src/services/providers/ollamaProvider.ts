@@ -8,7 +8,7 @@
 
 import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
-import { fetchWithTimeout, createTimeoutSignal } from '../utils/timeout';
+import { fetchWithTimeout } from '../utils/timeout';
 import { retry, isRetryableStatus } from '../utils/retry';
 
 type ProviderTimeoutOptions = {

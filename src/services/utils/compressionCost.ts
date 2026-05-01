@@ -5,8 +5,8 @@
 
 // Approximate API costs per request (based on Gemini pricing)
 const API_COSTS = {
-  compress_request: 0.00005, // ~$0.00005 per compression API call
-  validation_request: 0.00005, // ~$0.00005 per LLM judge call
+  compress_request: 0.0001, // ~$0.0001 per compression API call
+  validation_request: 0.0002, // ~$0.0002 per LLM judge call
 };
 
 // Token estimation
@@ -28,7 +28,7 @@ export function estimateAPICost(mode: 'fast' | 'safe'): number {
     return API_COSTS.compress_request;
   } else {
     // 2 API calls: compress + validate
-    return API_COSTS.compress_request + API_COSTS.validation_request;
+    return Number((API_COSTS.compress_request + API_COSTS.validation_request).toFixed(4));
   }
 }
 
@@ -59,7 +59,7 @@ export function calculateTokenSavings(original: string, compressed: string): {
 /**
  * Estimate cost savings from using compressed prompt in future
  */
-export function estimateFutureSavings(originalTokens: number): {
+export function estimateFutureSavings(tokensSaved: number, apiCost?: number): {
   tokenCostReduction: number;
   breakEvenUses: number;
 } {
@@ -67,11 +67,15 @@ export function estimateFutureSavings(originalTokens: number): {
   const costPerToken = 0.00000015; // ~$0.00015 per 1000 tokens
 
   // Savings per use
-  const tokenCostReduction = originalTokens * costPerToken;
+  const tokenCostReduction = Math.max(0, tokensSaved) * costPerToken;
+  const breakEvenUses =
+    tokenCostReduction > 0 && apiCost
+      ? Math.max(1, Math.ceil(apiCost / tokenCostReduction))
+      : Number.POSITIVE_INFINITY;
 
   return {
     tokenCostReduction,
-    breakEvenUses: 1, // Usually break even after 1-2 uses
+    breakEvenUses,
   };
 }
 
@@ -93,11 +97,11 @@ export function calculateCompressionROI(
 } {
   const apiCost = estimateAPICost(mode);
   const savings = calculateTokenSavings(original, compressed);
-  const futureEstimate = estimateFutureSavings(savings.originalTokens);
+  const futureEstimate = estimateFutureSavings(savings.tokensSaved, apiCost);
 
   // ROI calculation
-  const roi = futureEstimate.tokenCostReduction / apiCost;
-  const worthIt = roi > 1; // Worth it if savings > cost
+  const roi = apiCost > 0 ? futureEstimate.tokenCostReduction / apiCost : 0;
+  const worthIt = futureEstimate.breakEvenUses <= 1;
 
   const apiCostFormatted = apiCost < 0.001
     ? `$${(apiCost * 1000).toFixed(2)}m`
@@ -109,8 +113,10 @@ export function calculateCompressionROI(
   let message = '';
   if (worthIt) {
     message = `Great! Saves ${savings.percentReduction}% tokens. Worth it after ${futureEstimate.breakEvenUses} use(s).`;
+  } else if (Number.isFinite(futureEstimate.breakEvenUses)) {
+    message = `Saves ${savings.percentReduction}% tokens. Break-even is about ${futureEstimate.breakEvenUses} use(s).`;
   } else {
-    message = `Saves ${savings.percentReduction}% tokens, but break-even depends on usage frequency.`;
+    message = `No token savings detected yet, so compression is not cost-effective for reuse.`;
   }
 
   return {

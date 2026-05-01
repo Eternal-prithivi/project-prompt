@@ -6,7 +6,6 @@
  * Implements ILLMProvider interface using Anthropic's API with structured output
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { timeoutPromise } from '../utils/timeout';
@@ -16,19 +15,40 @@ type ProviderTimeoutOptions = {
   timeoutMs?: number;
 };
 
+type AnthropicSdk = typeof import('@anthropic-ai/sdk');
+type AnthropicClient = InstanceType<AnthropicSdk['default']>;
+
+let anthropicSdkPromise: Promise<AnthropicSdk> | null = null;
+
+function loadAnthropicSdk(): Promise<AnthropicSdk> {
+  anthropicSdkPromise ??= import('@anthropic-ai/sdk');
+  return anthropicSdkPromise;
+}
+
 export class ClaudeProvider implements ILLMProvider {
-  private client: Anthropic;
+  private apiKey: string;
+  private client: AnthropicClient | null = null;
   private timeoutMs: number;
 
   constructor(apiKey: string, opts: ProviderTimeoutOptions = {}) {
     if (!apiKey || apiKey === 'undefined') {
       throw new Error('Claude API key is required. Please provide a valid Anthropic API key.');
     }
+    this.apiKey = apiKey;
     this.timeoutMs = opts.timeoutMs ?? 30000;
+  }
+
+  private async getClient(): Promise<AnthropicClient> {
+    if (this.client) {
+      return this.client;
+    }
+
+    const { default: Anthropic } = await loadAnthropicSdk();
     this.client = new Anthropic({
-      apiKey,
+      apiKey: this.apiKey,
       dangerouslyAllowBrowser: true,
     });
+    return this.client;
   }
 
   private cleanJSON(text: string): string {
@@ -41,9 +61,9 @@ export class ClaudeProvider implements ILLMProvider {
   }
 
   async analyzePrompt(input: string): Promise<PromptComponents> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model: 'claude-3-opus-20250219',
           max_tokens: 1024,
           messages: [
@@ -73,9 +93,9 @@ export class ClaudeProvider implements ILLMProvider {
       ? `\n4. Custom: Write it specifically acting as a "${components.customPersona}".`
       : '';
 
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model: 'claude-3-opus-20250219',
           max_tokens: 2048,
           messages: [
@@ -114,9 +134,9 @@ export class ClaudeProvider implements ILLMProvider {
   }
 
   async magicRefine(components: PromptComponents): Promise<PromptComponents> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model: 'claude-3-opus-20250219',
           max_tokens: 1024,
           messages: [
@@ -149,9 +169,9 @@ export class ClaudeProvider implements ILLMProvider {
     qas: { q: string; a: string }[]
   ): Promise<PromptComponents> {
     const qaString = qas.map((qa) => `Question: ${qa.q}\nUser Answer: ${qa.a}`).join('\n\n');
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model: 'claude-3-opus-20250219',
           max_tokens: 1024,
           messages: [
@@ -183,9 +203,9 @@ export class ClaudeProvider implements ILLMProvider {
   }
 
   async generateExamples(components: PromptComponents): Promise<string> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model: 'claude-3-opus-20250219',
           max_tokens: 1024,
           messages: [
@@ -209,9 +229,9 @@ export class ClaudeProvider implements ILLMProvider {
   }
 
   async runPrompt(promptText: string, model: string = 'claude-3-opus-20250219'): Promise<string> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model,
           max_tokens: 2048,
           messages: [
@@ -230,9 +250,9 @@ export class ClaudeProvider implements ILLMProvider {
   }
 
   async compressPrompt(promptText: string): Promise<string> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.messages.create({
+        (await this.getClient()).messages.create({
           model: 'claude-3-opus-20250219',
           max_tokens: 1024,
           messages: [
@@ -262,9 +282,9 @@ export class ClaudeProvider implements ILLMProvider {
     outB: string
   ): Promise<JudgeVerdict> {
     try {
-      const response = await this.callWithRetry(() =>
+      const response = await this.callWithRetry(async () =>
         timeoutPromise(
-          this.client.messages.create({
+          (await this.getClient()).messages.create({
             model: 'claude-3-opus-20250219',
             max_tokens: 512,
             messages: [

@@ -4,6 +4,73 @@
  * that compression preserves essential meaning.
  */
 
+const FORMAT_KEYWORDS = [
+  'json',
+  'markdown',
+  'yaml',
+  'list',
+  'table',
+  'bullet',
+  'numbered',
+  'csv',
+  'xml',
+  'html',
+] as const;
+
+const REQUIRED_PATTERNS = [
+  /must/gi,
+  /required/gi,
+  /mandatory/gi,
+  /critical/gi,
+  /important/gi,
+  /never/gi,
+  /always/gi,
+  /ensure/gi,
+  /guarantee/gi,
+] as const;
+
+const REQUIRED_KEYWORDS = [
+  'must',
+  'required',
+  'mandatory',
+  'critical',
+  'important',
+  'never',
+  'always',
+  'ensure',
+  'guarantee',
+] as const;
+
+const TONE_KEYWORDS = [
+  'professional',
+  'casual',
+  'formal',
+  'friendly',
+  'technical',
+  'simple',
+  'detailed',
+  'concise',
+  'verbose',
+  'academic',
+] as const;
+
+function extractVariables(prompt: string): string[] {
+  const variables: string[] = [];
+  const variableRegex = /\[([A-Z_]+)\]/g;
+  let match;
+  while ((match = variableRegex.exec(prompt)) !== null) {
+    variables.push(`[${match[1]}]`);
+  }
+  return [...new Set(variables)];
+}
+
+function includesConstraint(text: string, keyword: string): boolean {
+  if (keyword.startsWith('[') && keyword.endsWith(']')) {
+    return text.includes(keyword);
+  }
+  return text.toLowerCase().includes(keyword.toLowerCase());
+}
+
 /**
  * Extract critical keywords and constraints from prompt
  */
@@ -11,45 +78,17 @@ export function extractConstraints(prompt: string): string[] {
   const constraints: string[] = [];
 
   // Extract bracketed variables [UPPERCASE]
-  const variableRegex = /\[([A-Z_]+)\]/g;
-  let match;
-  while ((match = variableRegex.exec(prompt)) !== null) {
-    constraints.push(`[${match[1]}]`);
-  }
+  constraints.push(...extractVariables(prompt));
 
   // Extract formatting keywords
-  const formatKeywords = [
-    'json',
-    'markdown',
-    'yaml',
-    'list',
-    'table',
-    'bullet',
-    'numbered',
-    'csv',
-    'xml',
-    'html',
-  ];
-  formatKeywords.forEach((keyword) => {
+  FORMAT_KEYWORDS.forEach((keyword) => {
     if (prompt.toLowerCase().includes(keyword)) {
       constraints.push(keyword);
     }
   });
 
   // Extract critical requirement patterns
-  const requiredPatterns = [
-    /must/gi,
-    /required/gi,
-    /mandatory/gi,
-    /critical/gi,
-    /important/gi,
-    /never/gi,
-    /always/gi,
-    /ensure/gi,
-    /guarantee/gi,
-  ];
-
-  requiredPatterns.forEach((pattern) => {
+  REQUIRED_PATTERNS.forEach((pattern) => {
     const matches = prompt.match(pattern);
     if (matches) {
       constraints.push(matches[0].toLowerCase());
@@ -57,19 +96,7 @@ export function extractConstraints(prompt: string): string[] {
   });
 
   // Extract tone/style keywords
-  const styleKeywords = [
-    'professional',
-    'casual',
-    'formal',
-    'friendly',
-    'technical',
-    'simple',
-    'detailed',
-    'concise',
-    'verbose',
-    'academic',
-  ];
-  styleKeywords.forEach((keyword) => {
+  TONE_KEYWORDS.forEach((keyword) => {
     if (prompt.toLowerCase().includes(keyword)) {
       constraints.push(keyword);
     }
@@ -91,7 +118,7 @@ export function getPreservedKeywords(
   const lost: string[] = [];
 
   constraints.forEach((keyword) => {
-    if (compressed.includes(keyword)) {
+    if (includesConstraint(compressed, keyword)) {
       preserved.push(keyword);
     } else {
       lost.push(keyword);
@@ -128,9 +155,6 @@ export function validateKeywordPreservation(
 
   // Determine pass/fail
   // Lost critical keywords are bad
-  const hasMustKeywords = constraints.some((k) =>
-    ['must', 'never', 'required', 'mandatory'].includes(k.toLowerCase())
-  );
   const lostMustKeywords = lost.some((k) =>
     ['must', 'never', 'required', 'mandatory'].includes(k.toLowerCase())
   );
@@ -158,49 +182,18 @@ export function analyzeConstraintPreservation(
   totalScore: number;
 } {
   // Extract all constraint types
-  const variables: string[] = [];
-  const variableRegex = /\[([A-Z_]+)\]/g;
-  let match;
-  while ((match = variableRegex.exec(original)) !== null) {
-    variables.push(`[${match[1]}]`);
-  }
-
-  const formatKeywords = [
-    'json',
-    'markdown',
-    'yaml',
-    'list',
-    'table',
-    'bullet',
-    'numbered',
-  ];
-  const requiredKeywords = [
-    'must',
-    'required',
-    'mandatory',
-    'critical',
-    'never',
-    'always',
-  ];
-  const toneKeywords = [
-    'professional',
-    'casual',
-    'friendly',
-    'technical',
-    'formal',
-  ];
+  const originalLower = original.toLowerCase();
+  const compressedLower = compressed.toLowerCase();
+  const variables = extractVariables(original);
+  const formatKeywords = FORMAT_KEYWORDS.filter((keyword) => originalLower.includes(keyword));
+  const requiredKeywords = REQUIRED_KEYWORDS.filter((keyword) => originalLower.includes(keyword));
+  const toneKeywords = TONE_KEYWORDS.filter((keyword) => originalLower.includes(keyword));
 
   // Find lost items
   const lostVariables = variables.filter((v) => !compressed.includes(v));
-  const lostFormatting = formatKeywords.filter((k) =>
-    original.toLowerCase().includes(k) && !compressed.toLowerCase().includes(k)
-  );
-  const lostRequirements = requiredKeywords.filter((k) =>
-    original.toLowerCase().includes(k) && !compressed.toLowerCase().includes(k)
-  );
-  const lostTone = toneKeywords.filter((k) =>
-    original.toLowerCase().includes(k) && !compressed.toLowerCase().includes(k)
-  );
+  const lostFormatting = formatKeywords.filter((keyword) => !compressedLower.includes(keyword));
+  const lostRequirements = requiredKeywords.filter((keyword) => !compressedLower.includes(keyword));
+  const lostTone = toneKeywords.filter((keyword) => !compressedLower.includes(keyword));
 
   // Calculate total score
   const totalItems =

@@ -1,67 +1,101 @@
-/**
- * Tests for ChatGPT Provider
- * Focus on initialization, error handling, and interface compliance
- */
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatGPTProvider } from '../../services/providers/chatgptProvider';
 
+const completion = (content: string) => ({
+  choices: [{ message: { content } }],
+});
+
 describe('ChatGPTProvider', () => {
-  describe('initialization', () => {
-    it('should initialize with valid API key', () => {
-      expect(() => new ChatGPTProvider('sk-test-key')).not.toThrow();
-    });
+  let provider: ChatGPTProvider;
+  let create: ReturnType<typeof vi.fn>;
 
-    it('should throw error with missing API key', () => {
-      expect(() => new ChatGPTProvider('')).toThrow('ChatGPT API key is required');
-    });
+  beforeEach(() => {
+    create = vi.fn();
+    provider = new ChatGPTProvider('sk-test-key');
+    (provider as any).client = {
+      chat: {
+        completions: {
+          create,
+        },
+      },
+    };
+  });
 
-    it('should throw error with undefined API key', () => {
-      expect(() => new ChatGPTProvider('undefined')).toThrow('ChatGPT API key is required');
+  it('rejects missing API keys at construction time', () => {
+    expect(() => new ChatGPTProvider('')).toThrow('ChatGPT API key is required');
+    expect(() => new ChatGPTProvider('undefined')).toThrow('ChatGPT API key is required');
+  });
+
+  it('parses JSON analysis responses and adds an empty custom persona', async () => {
+    create.mockResolvedValueOnce(
+      completion('```json\n{"role":"Editor","task":"Refine copy","context":"Marketing","format":"JSON","constraints":"None"}\n```')
+    );
+
+    await expect(provider.analyzePrompt('Improve this prompt')).resolves.toEqual({
+      role: 'Editor',
+      task: 'Refine copy',
+      context: 'Marketing',
+      format: 'JSON',
+      constraints: 'None',
+      customPersona: '',
     });
   });
 
-  describe('interface compliance', () => {
-    let provider: ChatGPTProvider;
+  it('reindexes generated variations and keeps the custom persona instruction', async () => {
+    create.mockResolvedValueOnce(
+      completion(
+        JSON.stringify([
+          { id: 'abc', type: 'precisionist', title: 'A', description: 'desc', content: 'content A' },
+          { id: 'def', type: 'creative', title: 'B', description: 'desc', content: 'content B' },
+        ])
+      )
+    );
 
-    beforeEach(() => {
-      provider = new ChatGPTProvider('sk-test-key');
-      (provider as any).client = {
-        chat: {
-          completions: {
-            create: vi.fn().mockResolvedValue({
-              choices: [{ message: { content: '[]' } }],
-            }),
-          },
-        },
-      };
+    const variations = await provider.generateVariations({
+      role: 'Writer',
+      task: 'Draft',
+      context: 'Email',
+      format: 'Markdown',
+      constraints: 'Concise',
+      customPersona: 'Pirate',
     });
 
-    it('should implement all required ILLMProvider methods', () => {
-      expect(typeof provider.analyzePrompt).toBe('function');
-      expect(typeof provider.generateVariations).toBe('function');
-      expect(typeof provider.magicRefine).toBe('function');
-      expect(typeof provider.integrateAnswers).toBe('function');
-      expect(typeof provider.generateExamples).toBe('function');
-      expect(typeof provider.runPrompt).toBe('function');
-      expect(typeof provider.compressPrompt).toBe('function');
-      expect(typeof provider.judgeArenaOutputs).toBe('function');
-    });
+    expect(variations.map((item) => item.id)).toEqual(['0', '1']);
+    expect(create.mock.calls[0][0].messages[0].content).toContain('Pirate');
+  });
 
-    it('should have analyzePrompt as async method', async () => {
-      const result = provider.analyzePrompt('test');
-      expect(result instanceof Promise).toBe(true);
-    });
+  it('forwards explicit models to runPrompt and returns the provider text response', async () => {
+    create.mockResolvedValueOnce(completion('Provider answer'));
 
-    it('should have generateVariations as async method', async () => {
-      const result = provider.generateVariations({
-        role: 'test',
-        task: 'test',
-        context: 'test',
-        format: 'test',
-        constraints: 'test',
-      });
-      expect(result instanceof Promise).toBe(true);
+    await expect(provider.runPrompt('Hello world', 'gpt-4-turbo')).resolves.toBe('Provider answer');
+    expect(create.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        model: 'gpt-4-turbo',
+      })
+    );
+  });
+
+  it('falls back to the original prompt when compression returns an empty string', async () => {
+    create.mockResolvedValueOnce(completion(''));
+
+    await expect(provider.compressPrompt('Original prompt')).resolves.toBe('Original prompt');
+  });
+
+  it('returns a safe tie verdict if judging fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    create.mockRejectedValueOnce(new Error('Judge failure'));
+
+    await expect(
+      provider.judgeArenaOutputs(
+        { role: 'Judge', task: 'Compare', context: '', format: '', constraints: '' },
+        'Prompt A',
+        'Output A',
+        'Prompt B',
+        'Output B'
+      )
+    ).resolves.toEqual({
+      winner: 'TIE',
+      reasoning: 'Judge error: Judge failure',
     });
   });
 });

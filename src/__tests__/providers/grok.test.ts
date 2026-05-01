@@ -1,104 +1,99 @@
-/**
- * Tests for Grok Provider
- * Focus on initialization, error handling, and interface compliance
- */
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GrokProvider } from '../../services/providers/grokProvider';
 
+const completion = (content: string) => ({
+  choices: [{ message: { content } }],
+});
+
 describe('GrokProvider', () => {
-  const stubClient = (provider: GrokProvider) => {
+  let provider: GrokProvider;
+  let create: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    create = vi.fn();
+    provider = new GrokProvider('xai-test-key');
     (provider as any).client = {
       chat: {
         completions: {
-          create: vi.fn().mockResolvedValue({
-            choices: [{ message: { content: '[]' } }],
-          }),
+          create,
         },
       },
     };
-  };
-  describe('initialization', () => {
-    it('should initialize with valid API key', () => {
-      expect(() => new GrokProvider('xai-test-key')).not.toThrow();
-    });
+  });
 
-    it('should throw error with missing API key', () => {
-      expect(() => new GrokProvider('')).toThrow('Grok API key is required');
-    });
+  it('rejects missing API keys at construction time', () => {
+    expect(() => new GrokProvider('')).toThrow('Grok API key is required');
+    expect(() => new GrokProvider('undefined')).toThrow('Grok API key is required');
+  });
 
-    it('should throw error with undefined API key', () => {
-      expect(() => new GrokProvider('undefined')).toThrow('Grok API key is required');
+  it('parses analysis JSON and adds an empty custom persona', async () => {
+    create.mockResolvedValueOnce(
+      completion('```json\n{"role":"Researcher","task":"Analyze","context":"xAI","format":"JSON","constraints":"None"}\n```')
+    );
+
+    await expect(provider.analyzePrompt('Analyze this')).resolves.toEqual({
+      role: 'Researcher',
+      task: 'Analyze',
+      context: 'xAI',
+      format: 'JSON',
+      constraints: 'None',
+      customPersona: '',
     });
   });
 
-  describe('interface compliance', () => {
-    let provider: GrokProvider;
+  it('passes custom persona instructions through variation generation', async () => {
+    create.mockResolvedValueOnce(
+      completion(
+        JSON.stringify([
+          { id: 'x', type: 'precisionist', title: 'A', description: 'desc', content: 'content A' },
+        ])
+      )
+    );
 
-    beforeEach(() => {
-      provider = new GrokProvider('xai-test-key');
-      stubClient(provider);
+    await provider.generateVariations({
+      role: 'Writer',
+      task: 'Draft',
+      context: 'Email',
+      format: 'Markdown',
+      constraints: 'Concise',
+      customPersona: 'Astronaut',
     });
 
-    it('should implement all required ILLMProvider methods', () => {
-      expect(typeof provider.analyzePrompt).toBe('function');
-      expect(typeof provider.generateVariations).toBe('function');
-      expect(typeof provider.magicRefine).toBe('function');
-      expect(typeof provider.integrateAnswers).toBe('function');
-      expect(typeof provider.generateExamples).toBe('function');
-      expect(typeof provider.runPrompt).toBe('function');
-      expect(typeof provider.compressPrompt).toBe('function');
-      expect(typeof provider.judgeArenaOutputs).toBe('function');
-    });
-
-    it('should have analyzePrompt as async method', async () => {
-      const result = provider.analyzePrompt('test');
-      expect(result instanceof Promise).toBe(true);
-    });
-
-    it('should have generateVariations as async method', async () => {
-      const result = provider.generateVariations({
-        role: 'test',
-        task: 'test',
-        context: 'test',
-        format: 'test',
-        constraints: 'test',
-      });
-      expect(result instanceof Promise).toBe(true);
-    });
+    expect(create.mock.calls[0][0].messages[0].content).toContain('Astronaut');
   });
 
-  describe('model configuration', () => {
-    let provider: GrokProvider;
+  it('forwards explicit models through runPrompt', async () => {
+    create.mockResolvedValueOnce(completion('Grok answer'));
 
-    beforeEach(() => {
-      provider = new GrokProvider('xai-test-key');
-      stubClient(provider);
-    });
-
-    it('should support grok-2 model for runPrompt', () => {
-      expect(typeof provider.runPrompt).toBe('function');
-      const result = provider.runPrompt('test prompt', 'grok-2-1212');
-      expect(result instanceof Promise).toBe(true);
-    });
-
-    it('should have default model when not specified', () => {
-      const result = provider.runPrompt('test prompt');
-      expect(result instanceof Promise).toBe(true);
-    });
+    await expect(provider.runPrompt('Hello', 'grok-2-1212')).resolves.toBe('Grok answer');
+    expect(create.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        model: 'grok-2-1212',
+      })
+    );
   });
 
-  describe('xAI endpoint compatibility', () => {
-    let provider: GrokProvider;
+  it('falls back to the original prompt when compression returns an empty string', async () => {
+    create.mockResolvedValueOnce(completion(''));
 
-    beforeEach(() => {
-      provider = new GrokProvider('xai-test-key');
-      stubClient(provider);
-    });
+    await expect(provider.compressPrompt('Original prompt')).resolves.toBe('Original prompt');
+  });
 
-    it('should be configured for xAI API', () => {
-      // Provider should be initialized successfully
-      expect(provider).toBeDefined();
+  it('returns a safe tie verdict if judging fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    create.mockRejectedValueOnce(new Error('Judge failure'));
+
+    await expect(
+      provider.judgeArenaOutputs(
+        { role: 'Judge', task: 'Compare', context: '', format: '', constraints: '' },
+        'Prompt A',
+        'Output A',
+        'Prompt B',
+        'Output B'
+      )
+    ).resolves.toEqual({
+      winner: 'TIE',
+      reasoning: 'Judge error: Judge failure',
     });
   });
 });

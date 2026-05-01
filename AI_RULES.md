@@ -19,9 +19,20 @@ Always read, in order:
 
 - Do not make broad refactors unless explicitly requested
 - Keep changes scoped to the active task
+- Use test-driven development for behavioral changes: write or update tests first, then implement the production change
+- Prefer a targeted failing test before the fix; if a failing-first cycle is impractical, explain why in `AUDIT_LOG.md`
 - Preserve existing architecture patterns (`providerFactory`, `geminiService`, `ILLMProvider`)
 - Reuse existing utilities before adding new ones (`timeout.ts`, `errors.ts`)
 - Prefer minimal-risk edits over large rewrites
+
+## 2.1) Test coverage expectations
+
+- UI changes require component tests; multi-step user workflows require integration tests when practical.
+- Provider changes require provider-level tests for success, provider/API failures, timeout or network failure, malformed responses, and model-specific behavior.
+- Utility changes require direct unit tests for normal paths, edge cases, invalid input, and storage or environment failure modes.
+- Bug fixes require regression tests that would fail on the old behavior when practical.
+- Performance changes require build verification and tests showing user-visible behavior did not regress.
+- Test-only maintenance must preserve or improve determinism; do not weaken assertions just to make tests pass.
 
 ## 3) Quality gates
 
@@ -29,6 +40,7 @@ Before closing any coding session:
 
 - Run `npm run lint`
 - Run `npm test` (or targeted tests if user asks)
+- Run `npm run test:coverage` when auditing test completeness, changing coverage infrastructure, or adding broad features
 - If you changed code, ensure `PROGRESS.md` + `AUDIT_LOG.md` are updated and `SCRATCHPAD.md` is cleared.
 - If checks fail, either fix or clearly document unresolved failures in `AUDIT_LOG.md` and `PROGRESS.md`
 
@@ -40,6 +52,8 @@ CI enforcement:
 
 - Do not use destructive git operations
 - Do not silently change test expectations without documenting why
+- Do not implement feature code before test design for behavior changes
+- Do not mark a behavior change complete without automated tests or a documented exception
 - Do not bypass provider abstractions by hardcoding SDK calls into UI components
 - Do not store plaintext credentials
 - Do not leave stale TODO markers without tracking them in `PROGRESS.md`
@@ -78,4 +92,3 @@ Observed style in this codebase:
 - Update `AI_CONTEXT.md` if architecture or workflow changes
 - Keep `PROGRESS.md` concise and current
 - Keep `AUDIT_LOG.md` append-only
-

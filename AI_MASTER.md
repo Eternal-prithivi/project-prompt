@@ -27,9 +27,27 @@ If any of these files are missing, create them using the templates at the bottom
 1. Read `SCRATCHPAD.md` first — if there is an active task, continue it before starting anything new
 2. Confirm the objective from user request + `PROGRESS.md`
 3. Scope change to minimum safe set of files (list them before editing)
-4. Implement in small, verifiable steps — update `SCRATCHPAD.md` after each step
-5. Run quality checks (`npm run lint`, `npm test`)
-6. Summarize outcome clearly with verification results
+4. Define the test plan before implementation:
+   - identify unit, component, provider, utility, and integration tests affected
+   - create or update the relevant test files first for behavior changes
+   - run the targeted test and confirm it fails for the expected reason when practical
+5. Implement in small, verifiable steps — update `SCRATCHPAD.md` after each step
+6. Run quality checks (`npm run lint`, `npm test`, and `npm run test:coverage` when coverage risk changed)
+7. Summarize outcome clearly with verification results
+
+---
+
+## Test-driven development standard
+
+TDD is the default workflow for all feature, bug fix, and reliability work in this repository.
+
+- Tests come before production code for behavioral changes.
+- New user-facing behavior needs component or integration coverage.
+- New provider/service behavior needs unit tests around success, failure, timeout, malformed input, and edge cases.
+- Bug fixes need a regression test that fails before the fix when practical.
+- Refactors must preserve existing tests and add tests only when behavior or risk changes.
+- Documentation-only changes may skip new tests, but must still run the appropriate verification gates.
+- If a change cannot reasonably be tested, document why in `AUDIT_LOG.md` and add a tracked follow-up in `PROGRESS.md`.
 
 ---
 
@@ -64,8 +82,10 @@ After completing each task/session, update ALL of the following:
 A task is ONLY done when ALL of the following are true:
 
 - [ ] Implementation is complete
+- [ ] Tests were written or updated before implementation for behavior changes
 - [ ] `npm run lint` passed (or failures documented)
 - [ ] `npm test` passed (or failures documented with reason)
+- [ ] `npm run test:coverage` passed when coverage changed or test completeness is being audited
 - [ ] `PROGRESS.md` updated with checked-off items
 - [ ] `AUDIT_LOG.md` has a new entry
 - [ ] `SCRATCHPAD.md` is cleared (no dangling active task)

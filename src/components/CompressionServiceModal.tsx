@@ -1,22 +1,19 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Copy, Check, RefreshCw, X, Settings2, Zap, Shield } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Copy, Check, RefreshCw, X, Zap, Shield } from 'lucide-react';
 import { Button } from './ui/Button';
-import { Card, Textarea } from './ui/Inputs';
+import { Textarea } from './ui/Inputs';
 import { compressPrompt } from '../services/geminiService';
 import {
   cacheCompression,
   getCachedCompression,
-  isCached,
 } from '../services/utils/compressionCache';
 import {
   validateKeywordPreservation,
-  analyzeConstraintPreservation,
 } from '../services/utils/keywordExtractor';
 import {
   calculateTokenSavings,
   calculateCompressionROI,
-  getCompressionCostSummary,
 } from '../services/utils/compressionCost';
 import {
   safeRuleBasedCompress,
@@ -96,7 +93,7 @@ export const CompressionServiceModal: React.FC<{
             return;
           }
         }
-      } catch (e) {
+      } catch {
         // Fallback to rule-based compression if API fails
         const fallback = safeRuleBasedCompress(input);
         if (!fallback.success) {
@@ -160,6 +157,9 @@ export const CompressionServiceModal: React.FC<{
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
+        role="dialog"
+        aria-label="Compression Service"
+        aria-modal="true"
         className="bg-[#0B0D17] border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
       >
         {/* Header */}
@@ -175,6 +175,7 @@ export const CompressionServiceModal: React.FC<{
           </div>
           <button
             onClick={onClose}
+            aria-label="Close compression modal"
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-white/60" />
@@ -297,6 +298,12 @@ export const CompressionServiceModal: React.FC<{
             <>
               {/* Result Section */}
               <div className="space-y-4">
+                {error && (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-sm">
+                    {error}
+                  </div>
+                )}
+
                 {/* Metrics */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">

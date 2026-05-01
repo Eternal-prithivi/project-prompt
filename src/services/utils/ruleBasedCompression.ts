@@ -178,7 +178,7 @@ export function safeRuleBasedCompress(original: string): {
       quality: viability.quality,
       message: viability.reason,
     };
-  } catch (e) {
+  } catch {
     return {
       success: false,
       compressed: original,

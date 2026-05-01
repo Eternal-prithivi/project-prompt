@@ -27,7 +27,7 @@ Prompt Architect is a React + TypeScript application for turning rough prompts i
   - `openai`
   - `@anthropic-ai/sdk`
 - Security/storage: `crypto-js` for credential encryption
-- Testing: Vitest + Testing Library
+- Testing: Vitest + Testing Library + Playwright + MSW
 
 ## Project structure
 
@@ -87,17 +87,67 @@ Primary variables:
 - `npm run dev` - start local development server
 - `npm run build` - production build
 - `npm run preview` - preview build output
-- `npm run lint` - TypeScript typecheck (`tsc --noEmit`)
-- `npm test` - run Vitest suite
+- `npm run typecheck` - TypeScript typecheck (`tsc --noEmit`)
+- `npm run lint` - typecheck + ESLint
+- `npm test` - run Vitest suite once (CI-safe)
 - `npm run test:ui` - Vitest UI
-- `npm run test:coverage` - test coverage run
+- `npm run test:coverage` - coverage run with thresholds (`70/60/65/70`)
+- `npm run test:e2e` - Playwright browser flows
+
+## Build optimization
+
+Production builds use Vite/Rollup manual chunks for heavyweight provider SDKs and shared runtime libraries. This keeps the primary app chunk small while preserving lazy modal chunks for large UI surfaces.
+
+Current named vendor chunks include:
+
+- `vendor-google-genai`
+- `vendor-openai`
+- `vendor-anthropic`
+- `vendor-react`
+- `vendor-motion`
+- `vendor-icons`
+- `vendor-crypto`
+
+## Runtime performance
+
+Live prompt tests use a session-scoped response cache keyed by provider, model, and resolved prompt text. Re-running the same test can return instantly from cache, while the result panel exposes a `REFRESH` action to bypass cache and call the active provider again.
+
+Cloud provider SDKs are dynamically imported by their provider implementations. This keeps Gemini, OpenAI, and Anthropic SDK chunks out of the initial HTML modulepreload list; they load only when a selected provider actually needs them.
+
+## Testing and TDD workflow
+
+Prompt Architect uses test-driven development for feature, bug fix, and reliability work.
+
+Default workflow:
+
+1. Add or update the relevant test first.
+2. Run the targeted test and confirm the expected failure when practical.
+3. Implement the smallest production change.
+4. Run `npm run lint`, `npm test`, `npm run test:coverage`, and `npm run test:e2e` when coverage or browser-flow confidence is part of the work.
+
+Test locations:
+
+- `src/__tests__/components/` for React UI behavior
+- `src/__tests__/providers/` for LLM provider contracts and provider-specific behavior
+- `src/__tests__/services/` for storage/service behavior
+- `src/__tests__/utils/` for shared utility edge cases
+- `src/__tests__/integration/` for cross-flow workflow coverage
 
 ## Reliability status (current)
 
 - Timeout safety has been standardized across providers and validation calls
 - Provider initialization failure handling is in place
+- Settings choose one active provider, and all runtime LLM requests route through that selected provider
 - Error message normalization utility is present (`safeErrorMessage`)
 - Credential storage supports password-based encrypted mode with unlock flow
+- Automated coverage now has enforced minimums, and browser workflows are scaffolded in Playwright for end-to-end smoke coverage.
+
+## Test layers
+
+- Unit/component/integration tests run in Vitest with shared setup from `src/__tests__/setup.ts`.
+- Network-facing UI tests can use MSW request handlers instead of ad hoc `fetch` stubs when a real request layer is helpful.
+- Browser flows live in `e2e/` and run through Playwright against the Vite dev server.
+- Manual provider verification steps are documented in [docs/manual-provider-smoke.md](docs/manual-provider-smoke.md).
 
 ## AI collaboration docs
 
@@ -108,4 +158,3 @@ If you are an AI agent or working with one, read these files in order:
 3. `AI_RULES.md`
 4. `PROGRESS.md`
 5. `AUDIT_LOG.md`
-

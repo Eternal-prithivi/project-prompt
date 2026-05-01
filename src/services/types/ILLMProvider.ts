@@ -58,7 +58,7 @@ export interface ILLMProvider {
    * @param model - Model name/version (provider-specific: "gemini-3.1-pro-preview" etc)
    * @returns Raw response from the LLM
    */
-  runPrompt(promptText: string, model: string): Promise<string>;
+  runPrompt(promptText: string, model?: string): Promise<string>;
 
   /**
    * Compress a prompt to minimize token usage without losing meaning

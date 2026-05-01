@@ -6,7 +6,6 @@
  * Implements ILLMProvider interface using xAI's API (compatible with OpenAI SDK)
  */
 
-import OpenAI from 'openai';
 import { ILLMProvider } from '../types/ILLMProvider';
 import { PromptComponents, PromptVariation, JudgeVerdict } from '../../types';
 import { timeoutPromise } from '../utils/timeout';
@@ -16,21 +15,41 @@ type ProviderTimeoutOptions = {
   timeoutMs?: number;
 };
 
+type OpenAISdk = typeof import('openai');
+type OpenAIClient = InstanceType<OpenAISdk['default']>;
+
+let openAISdkPromise: Promise<OpenAISdk> | null = null;
+
+function loadOpenAISdk(): Promise<OpenAISdk> {
+  openAISdkPromise ??= import('openai');
+  return openAISdkPromise;
+}
+
 export class GrokProvider implements ILLMProvider {
-  private client: OpenAI;
+  private apiKey: string;
+  private client: OpenAIClient | null = null;
   private timeoutMs: number;
 
   constructor(apiKey: string, opts: ProviderTimeoutOptions = {}) {
     if (!apiKey || apiKey === 'undefined') {
       throw new Error('Grok API key is required. Please provide a valid xAI API key.');
     }
+    this.apiKey = apiKey;
     this.timeoutMs = opts.timeoutMs ?? 30000;
-    // Configure OpenAI client to use xAI's endpoint
+  }
+
+  private async getClient(): Promise<OpenAIClient> {
+    if (this.client) {
+      return this.client;
+    }
+
+    const { default: OpenAI } = await loadOpenAISdk();
     this.client = new OpenAI({
-      apiKey,
+      apiKey: this.apiKey,
       baseURL: 'https://api.x.ai/v1',
       dangerouslyAllowBrowser: true,
     });
+    return this.client;
   }
 
   private cleanJSON(text: string): string {
@@ -43,9 +62,9 @@ export class GrokProvider implements ILLMProvider {
   }
 
   async analyzePrompt(input: string): Promise<PromptComponents> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model: 'grok-2-1212',
           messages: [
             {
@@ -74,9 +93,9 @@ export class GrokProvider implements ILLMProvider {
       ? `\n4. Custom: Write it specifically acting as a "${components.customPersona}".`
       : '';
 
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model: 'grok-2-1212',
           messages: [
             {
@@ -114,9 +133,9 @@ export class GrokProvider implements ILLMProvider {
   }
 
   async magicRefine(components: PromptComponents): Promise<PromptComponents> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model: 'grok-2-1212',
           messages: [
             {
@@ -148,9 +167,9 @@ export class GrokProvider implements ILLMProvider {
     qas: { q: string; a: string }[]
   ): Promise<PromptComponents> {
     const qaString = qas.map((qa) => `Question: ${qa.q}\nUser Answer: ${qa.a}`).join('\n\n');
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model: 'grok-2-1212',
           messages: [
             {
@@ -181,9 +200,9 @@ export class GrokProvider implements ILLMProvider {
   }
 
   async generateExamples(components: PromptComponents): Promise<string> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model: 'grok-2-1212',
           messages: [
             {
@@ -206,9 +225,9 @@ export class GrokProvider implements ILLMProvider {
   }
 
   async runPrompt(promptText: string, model: string = 'grok-2-1212'): Promise<string> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model,
           messages: [
             {
@@ -226,9 +245,9 @@ export class GrokProvider implements ILLMProvider {
   }
 
   async compressPrompt(promptText: string): Promise<string> {
-    const response = await this.callWithRetry(() =>
+    const response = await this.callWithRetry(async () =>
       timeoutPromise(
-        this.client.chat.completions.create({
+        (await this.getClient()).chat.completions.create({
           model: 'grok-2-1212',
           messages: [
             {
@@ -257,9 +276,9 @@ export class GrokProvider implements ILLMProvider {
     outB: string
   ): Promise<JudgeVerdict> {
     try {
-      const response = await this.callWithRetry(() =>
+      const response = await this.callWithRetry(async () =>
         timeoutPromise(
-          this.client.chat.completions.create({
+          (await this.getClient()).chat.completions.create({
             model: 'grok-2-1212',
             messages: [
               {

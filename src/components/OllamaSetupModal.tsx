@@ -9,7 +9,6 @@ import {
   type MacChipType,
   type ModelRecommendation,
 } from '../services/systemInfo';
-import { Button } from './ui/Button';
 
 interface OllamaSetupModalProps {
   isOpen: boolean;
@@ -38,7 +37,6 @@ export const OllamaSetupModal: React.FC<OllamaSetupModalProps> = ({
   const [userSelectedGPU, setUserSelectedGPU] = useState<GPUType>('none');
   const [userSelectedChip, setUserSelectedChip] = useState<MacChipType | undefined>(undefined);
   const [recommendations, setRecommendations] = useState<ModelRecommendation[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -62,7 +60,6 @@ export const OllamaSetupModal: React.FC<OllamaSetupModalProps> = ({
         }
         const recs = getModelRecommendations(savedSelection.ramGB, savedSelection.gpuType, savedSelection.chipType);
         setRecommendations(recs);
-        setSelectedModel(recs[0]?.model || 'neural-chat');
         setInstallInstructions(getInstallInstructions(info.os, recs[0]?.model));
 
         // If Ollama already running, skip to models; else to install
@@ -94,7 +91,6 @@ export const OllamaSetupModal: React.FC<OllamaSetupModalProps> = ({
     }
     const recs = getModelRecommendations(ram, gpu, chip);
     setRecommendations(recs);
-    setSelectedModel(recs[0]?.model || 'neural-chat');
     setInstallInstructions(getInstallInstructions(systemInfo.os, recs[0]?.model));
     saveUserHardwareSelection(ram, gpu, chip);
     setStep('install');
@@ -123,6 +119,7 @@ export const OllamaSetupModal: React.FC<OllamaSetupModalProps> = ({
             </div>
             <button
               onClick={onClose}
+              aria-label="Close Ollama setup"
               className="text-white/80 hover:text-white text-2xl font-bold hover:scale-110 transition-transform"
             >
               ✕

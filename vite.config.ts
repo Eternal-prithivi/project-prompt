@@ -3,6 +3,46 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
+function isPackage(id: string, packageName: string): boolean {
+  return id.includes(`/node_modules/${packageName}/`) || id.includes(`\\node_modules\\${packageName}\\`);
+}
+
+export function manualChunks(id: string): string | undefined {
+  if (!id.includes('node_modules')) {
+    return undefined;
+  }
+
+  if (id.includes('@google/genai')) {
+    return 'vendor-google-genai';
+  }
+
+  if (id.includes('@anthropic-ai/sdk')) {
+    return 'vendor-anthropic';
+  }
+
+  if (id.includes('/openai/') || id.includes('\\openai\\')) {
+    return 'vendor-openai';
+  }
+
+  if (isPackage(id, 'react') || isPackage(id, 'react-dom')) {
+    return 'vendor-react';
+  }
+
+  if (isPackage(id, 'motion')) {
+    return 'vendor-motion';
+  }
+
+  if (isPackage(id, 'lucide-react')) {
+    return 'vendor-icons';
+  }
+
+  if (isPackage(id, 'crypto-js')) {
+    return 'vendor-crypto';
+  }
+
+  return undefined;
+}
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', 'VITE_');
   return {
@@ -24,6 +64,13 @@ export default defineConfig(({mode}) => {
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks,
+        },
+      },
     },
   };
 });
