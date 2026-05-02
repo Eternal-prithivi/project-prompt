@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Copy, Check, RefreshCw, X, Zap, Shield } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Textarea } from './ui/Inputs';
-import { compressPrompt } from '../services/geminiService';
+import { compressPrompt } from '../services/llmService';
 import {
   cacheCompression,
   getCachedCompression,

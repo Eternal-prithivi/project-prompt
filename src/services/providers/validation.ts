@@ -16,6 +16,10 @@ export async function validateGeminiKey(key: string): Promise<{ valid: boolean; 
     return { valid: false, error: 'API key is required' };
   }
 
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { valid: false, error: 'You are currently offline. Please check your internet connection.' };
+  }
+
   try {
     const response = await retry(async () => {
       const res = await fetchWithTimeout(
@@ -54,6 +58,10 @@ export async function validateGeminiKey(key: string): Promise<{ valid: boolean; 
 export async function validateDeepseekKey(key: string): Promise<{ valid: boolean; error?: string }> {
   if (!key || key.trim().length === 0) {
     return { valid: false, error: 'API key is required' };
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { valid: false, error: 'You are currently offline. Please check your internet connection.' };
   }
 
   try {

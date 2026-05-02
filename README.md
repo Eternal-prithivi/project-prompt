@@ -36,7 +36,7 @@ Prompt Architect is a React + TypeScript application for turning rough prompts i
   - `ModelGallery.tsx`: model discovery/selection
   - `OllamaSetupModal.tsx`: local setup helper
 - `src/services/`
-  - `geminiService.ts`: provider delegation layer
+  - `llmService.ts`: provider delegation layer
   - `providerFactory.ts`: provider instance creation
   - `credentialStore.ts`: encrypted local credential persistence
   - `systemInfo.ts`: local machine capability detection

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, Sparkles, RefreshCw, Copy, Check, ChevronLeft, Play, Wand2, X, Terminal, Library, FileCode2, Target, BarChart2, Swords, Coins, Minimize2, Settings2, ShieldAlert, Info } from 'lucide-react';
-import { analyzePrompt, generateVariations, magicRefine, runPrompt, generateExamples, integrateAnswers, compressPrompt, judgeArenaOutputs, initializeProvider } from '../services/geminiService';
+import { analyzePrompt, generateVariations, magicRefine, runPrompt, generateExamples, integrateAnswers, compressPrompt, judgeArenaOutputs, initializeProvider } from '../services/llmService';
 import { PromptComponents, PromptVariation, WizardStep, HistoryItem, JudgeVerdict } from '../types';
 import { Button } from './ui/Button';
 import { Card, Input, Textarea } from './ui/Inputs';
@@ -18,6 +18,8 @@ import { cacheBattleResponse, getCachedBattleResponse } from '../services/utils/
 import { cacheCompression, getCachedCompression } from '../services/utils/compressionCache';
 import { calculateTokenSavings } from '../services/utils/compressionCost';
 import { validateKeywordPreservation } from '../services/utils/keywordExtractor';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { recordBattleWin } from '../services/utils/telemetryService';
 
 const OllamaSetupModal = React.lazy(() =>
   import('./OllamaSetupModal').then((module) => ({ default: module.OllamaSetupModal }))
@@ -27,6 +29,9 @@ const ModelGallery = React.lazy(() =>
 );
 const CompressionServiceModal = React.lazy(() =>
   import('./CompressionServiceModal').then((module) => ({ default: module.CompressionServiceModal }))
+);
+const AnalyticsDashboard = React.lazy(() =>
+  import('./AnalyticsDashboard').then((module) => ({ default: module.AnalyticsDashboard }))
 );
 
 const MetricBar = ({ label, score }: { label: string, score: number }) => (
@@ -669,6 +674,7 @@ export const VariationCard: React.FC<{
 };
 
 export const Wizard = () => {
+  const isOnline = useNetworkStatus();
   const [step, setStep] = useState<WizardStep>('initial');
   const [initialInput, setInitialInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -708,6 +714,7 @@ export const Wizard = () => {
   // Arena states
   const [arenaSelections, setArenaSelections] = useState<string[]>([]);
   const [isArenaModalOpen, setIsArenaModalOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1205,6 +1212,8 @@ export const Wizard = () => {
           const judgeRes = await judgeArenaOutputs(components, a.content, resA, b.content, resB);
           if (!isMountedRef.current) return;
           setVerdict(judgeRes);
+          
+          recordBattleWin(battleModel || selectedEngine);
 
           cacheBattleResponse({
             provider: selectedEngine === 'local' ? 'ollama' : selectedEngine,
@@ -1349,7 +1358,13 @@ export const Wizard = () => {
   };
 
   return (
-    <div className="flex w-full min-h-screen relative">
+    <div className="flex w-full min-h-screen relative bg-[#0B0D17] text-white font-sans selection:bg-indigo-500/30 overflow-x-hidden">
+      {!isOnline && (
+        <div className="absolute top-0 left-0 right-0 bg-amber-500/20 border-b border-amber-500/50 text-amber-200 px-4 py-2 text-center text-sm font-medium flex items-center justify-center gap-2 z-[60]">
+          <ShieldAlert className="w-4 h-4" />
+          You are currently offline. Cloud providers are disabled. Local (Ollama) is available.
+        </div>
+      )}
       {/* Sidebar Overlay */}
       <AnimatePresence>
         {isHistoryOpen && (
@@ -1443,6 +1458,9 @@ export const Wizard = () => {
             onClose={() => setIsCompressionServiceOpen(false)}
           />
         )}
+        {isAnalyticsOpen && (
+          <AnalyticsDashboard onClose={() => setIsAnalyticsOpen(false)} />
+        )}
       </React.Suspense>
 
       {/* Settings Overlay */}
@@ -1514,11 +1532,11 @@ export const Wizard = () => {
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                         {/* Gemini Option */}
                         <Card
-                           onClick={() => setSelectedEngine('gemini')}
-                           className={cn("p-4 cursor-pointer transition-all flex flex-col gap-3 relative", selectedEngine === 'gemini' ? "border-indigo-500/50 bg-indigo-500/10" : "border-white/10 bg-black/40 hover:bg-white/5")}
+                           onClick={() => { if (isOnline) setSelectedEngine('gemini'); }}
+                           className={cn("p-4 transition-all flex flex-col gap-3 relative", selectedEngine === 'gemini' ? "border-indigo-500/50 bg-indigo-500/10" : "border-white/10 bg-black/40 hover:bg-white/5", !isOnline ? "opacity-50 cursor-not-allowed grayscale" : "cursor-pointer")}
                         >
                            {selectedEngine === 'gemini' && <div className="absolute top-3 right-3"><Check className="w-4 h-4 text-indigo-400"/></div>}
-                           <h4 className="font-bold text-white">Google Gemini</h4>
+                           <h4 className="font-bold text-white flex items-center gap-2">Google Gemini {!isOnline && <span className="text-[9px] uppercase tracking-widest bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">Offline</span>}</h4>
                            <span className="text-xs text-white/50">Fast and powerful</span>
                            {selectedEngine === 'gemini' && (
                              <div className="mt-3 space-y-2">
@@ -1546,11 +1564,11 @@ export const Wizard = () => {
 
                         {/* DeepSeek Option */}
                         <Card
-                           onClick={() => setSelectedEngine('deepseek')}
-                           className={cn("p-4 cursor-pointer transition-all flex flex-col gap-3 relative", selectedEngine === 'deepseek' ? "border-blue-500/50 bg-blue-500/10" : "border-white/10 bg-black/40 hover:bg-white/5")}
+                           onClick={() => { if (isOnline) setSelectedEngine('deepseek'); }}
+                           className={cn("p-4 transition-all flex flex-col gap-3 relative", selectedEngine === 'deepseek' ? "border-blue-500/50 bg-blue-500/10" : "border-white/10 bg-black/40 hover:bg-white/5", !isOnline ? "opacity-50 cursor-not-allowed grayscale" : "cursor-pointer")}
                         >
                            {selectedEngine === 'deepseek' && <div className="absolute top-3 right-3"><Check className="w-4 h-4 text-blue-400"/></div>}
-                           <h4 className="font-bold text-white">DeepSeek</h4>
+                           <h4 className="font-bold text-white flex items-center gap-2">DeepSeek {!isOnline && <span className="text-[9px] uppercase tracking-widest bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">Offline</span>}</h4>
                            <span className="text-xs text-white/50">Cheap and reliable</span>
                            {selectedEngine === 'deepseek' && (
                              <div className="mt-3 space-y-2">
@@ -1607,11 +1625,11 @@ export const Wizard = () => {
 
                         {/* ChatGPT Option */}
                         <Card
-                           onClick={() => setSelectedEngine('chatgpt')}
-                           className={cn("p-4 cursor-pointer transition-all flex flex-col gap-3 relative", selectedEngine === 'chatgpt' ? "border-green-500/50 bg-green-500/10" : "border-white/10 bg-black/40 hover:bg-white/5")}
+                           onClick={() => { if (isOnline) setSelectedEngine('chatgpt'); }}
+                           className={cn("p-4 transition-all flex flex-col gap-3 relative", selectedEngine === 'chatgpt' ? "border-green-500/50 bg-green-500/10" : "border-white/10 bg-black/40 hover:bg-white/5", !isOnline ? "opacity-50 cursor-not-allowed grayscale" : "cursor-pointer")}
                         >
                            {selectedEngine === 'chatgpt' && <div className="absolute top-3 right-3"><Check className="w-4 h-4 text-green-400"/></div>}
-                           <h4 className="font-bold text-white">ChatGPT / OpenAI</h4>
+                           <h4 className="font-bold text-white flex items-center gap-2">ChatGPT / OpenAI {!isOnline && <span className="text-[9px] uppercase tracking-widest bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">Offline</span>}</h4>
                            <span className="text-xs text-white/50">Powerful GPT models (Phase 2)</span>
                            {selectedEngine === 'chatgpt' && (
                              <div className="mt-3 space-y-2">
@@ -1639,11 +1657,11 @@ export const Wizard = () => {
 
                         {/* Claude Option */}
                         <Card
-                           onClick={() => setSelectedEngine('claude')}
-                           className={cn("p-4 cursor-pointer transition-all flex flex-col gap-3 relative", selectedEngine === 'claude' ? "border-purple-500/50 bg-purple-500/10" : "border-white/10 bg-black/40 hover:bg-white/5")}
+                           onClick={() => { if (isOnline) setSelectedEngine('claude'); }}
+                           className={cn("p-4 transition-all flex flex-col gap-3 relative", selectedEngine === 'claude' ? "border-purple-500/50 bg-purple-500/10" : "border-white/10 bg-black/40 hover:bg-white/5", !isOnline ? "opacity-50 cursor-not-allowed grayscale" : "cursor-pointer")}
                         >
                            {selectedEngine === 'claude' && <div className="absolute top-3 right-3"><Check className="w-4 h-4 text-purple-400"/></div>}
-                           <h4 className="font-bold text-white">Claude / Anthropic</h4>
+                           <h4 className="font-bold text-white flex items-center gap-2">Claude / Anthropic {!isOnline && <span className="text-[9px] uppercase tracking-widest bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">Offline</span>}</h4>
                            <span className="text-xs text-white/50">Advanced reasoning (Phase 2)</span>
                            {selectedEngine === 'claude' && (
                              <div className="mt-3 space-y-2">
@@ -1671,11 +1689,11 @@ export const Wizard = () => {
 
                         {/* Grok Option */}
                         <Card
-                           onClick={() => setSelectedEngine('grok')}
-                           className={cn("p-4 cursor-pointer transition-all flex flex-col gap-3 relative", selectedEngine === 'grok' ? "border-orange-500/50 bg-orange-500/10" : "border-white/10 bg-black/40 hover:bg-white/5")}
+                           onClick={() => { if (isOnline) setSelectedEngine('grok'); }}
+                           className={cn("p-4 transition-all flex flex-col gap-3 relative", selectedEngine === 'grok' ? "border-orange-500/50 bg-orange-500/10" : "border-white/10 bg-black/40 hover:bg-white/5", !isOnline ? "opacity-50 cursor-not-allowed grayscale" : "cursor-pointer")}
                         >
                            {selectedEngine === 'grok' && <div className="absolute top-3 right-3"><Check className="w-4 h-4 text-orange-400"/></div>}
-                           <h4 className="font-bold text-white">Grok / xAI</h4>
+                           <h4 className="font-bold text-white flex items-center gap-2">Grok / xAI {!isOnline && <span className="text-[9px] uppercase tracking-widest bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">Offline</span>}</h4>
                            <span className="text-xs text-white/50">Next-gen reasoning (Phase 2)</span>
                            {selectedEngine === 'grok' && (
                              <div className="mt-3 space-y-2">
@@ -1729,6 +1747,9 @@ export const Wizard = () => {
              </Button>
             <Button variant="ghost" size="sm" onClick={() => setIsCompressionServiceOpen(true)} className="gap-2 font-mono text-cyan-400/70 hover:text-cyan-300 border border-transparent hover:border-cyan-400/20">
               <Minimize2 className="w-4 h-4" /> <span className="hidden md:inline">COMPRESS</span>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setIsAnalyticsOpen(true)} className="gap-2 font-mono text-purple-400/70 hover:text-purple-300 border border-transparent hover:border-purple-400/20">
+              <BarChart2 className="w-4 h-4" /> <span className="hidden md:inline">ANALYTICS</span>
             </Button>
             <Button variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="gap-2 font-mono">
               <Library className="w-4 h-4"/> <span className="hidden md:inline">LIBRARY</span>

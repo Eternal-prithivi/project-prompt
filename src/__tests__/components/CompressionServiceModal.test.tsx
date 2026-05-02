@@ -1,12 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompressionServiceModal } from '../../components/CompressionServiceModal';
-import * as geminiService from '../../services/geminiService';
+import * as llmService from '../../services/llmService';
 import * as compressionCache from '../../services/utils/compressionCache';
 import * as keywordExtractor from '../../services/utils/keywordExtractor';
 import * as ruleBasedCompression from '../../services/utils/ruleBasedCompression';
 
-vi.mock('../../services/geminiService', () => ({
+vi.mock('../../services/llmService', () => ({
   compressPrompt: vi.fn(),
 }));
 
@@ -83,11 +83,11 @@ describe('CompressionServiceModal', () => {
 
     expect(await screen.findByText(/Cached compressed prompt/i)).toBeInTheDocument();
     expect(screen.getByText(/\$0\.00 \(cached\)/i)).toBeInTheDocument();
-    expect(geminiService.compressPrompt).not.toHaveBeenCalled();
+    expect(llmService.compressPrompt).not.toHaveBeenCalled();
   });
 
   it('rejects low-quality safe-mode compression and keeps the modal in input mode', async () => {
-    vi.mocked(geminiService.compressPrompt).mockResolvedValue('Compressed without topic');
+    vi.mocked(llmService.compressPrompt).mockResolvedValue('Compressed without topic');
     vi.mocked(keywordExtractor.validateKeywordPreservation).mockReturnValue({
       passed: false,
       quality: 60,
@@ -107,7 +107,7 @@ describe('CompressionServiceModal', () => {
   });
 
   it('falls back to rule-based compression when the provider fails', async () => {
-    vi.mocked(geminiService.compressPrompt).mockRejectedValue(new Error('API unavailable'));
+    vi.mocked(llmService.compressPrompt).mockRejectedValue(new Error('API unavailable'));
 
     render(<CompressionServiceModal isOpen={true} onClose={onClose} />);
 
@@ -122,7 +122,7 @@ describe('CompressionServiceModal', () => {
   });
 
   it('supports copy, reset, and close flows after a successful compression', async () => {
-    vi.mocked(geminiService.compressPrompt).mockResolvedValue('Compressed prompt result');
+    vi.mocked(llmService.compressPrompt).mockResolvedValue('Compressed prompt result');
 
     render(<CompressionServiceModal isOpen={true} onClose={onClose} />);
 

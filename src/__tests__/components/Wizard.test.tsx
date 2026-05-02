@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 import { Wizard } from '../../components/Wizard';
-import * as geminiService from '../../services/geminiService';
+import * as llmService from '../../services/llmService';
 import * as credentialStore from '../../services/credentialStore';
 import * as providerFactory from '../../services/providerFactory';
 import * as validation from '../../services/providers/validation';
@@ -20,7 +20,7 @@ vi.mock('../../components/IncidentDisplay', () => ({
 }));
 
 // Mock the services
-vi.mock('../../services/geminiService', () => ({
+vi.mock('../../services/llmService', () => ({
   analyzePrompt: vi.fn().mockResolvedValue({
     role: 'Test Role',
     task: 'Test Task',
@@ -357,8 +357,8 @@ describe('Wizard Component', () => {
       render(<Wizard />);
       fireEvent.click(screen.getByText(/SETTINGS/i));
 
-      vi.mocked(geminiService.initializeProvider).mockClear();
-      vi.mocked(geminiService.initializeProvider).mockImplementationOnce(() => {
+      vi.mocked(llmService.initializeProvider).mockClear();
+      vi.mocked(llmService.initializeProvider).mockImplementationOnce(() => {
         throw new Error('Save failed');
       });
 
@@ -418,7 +418,7 @@ describe('Wizard Component', () => {
         );
       });
 
-      expect(geminiService.initializeProvider).toHaveBeenCalledWith({
+      expect(llmService.initializeProvider).toHaveBeenCalledWith({
         engine: 'chatgpt',
         apiKey: 'sk-test-openai-key',
         ollamaUrl: 'http://localhost:11434',
@@ -472,7 +472,7 @@ describe('Wizard Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /unlock/i }));
 
       await waitFor(() => {
-        expect(geminiService.initializeProvider).toHaveBeenCalledWith({
+        expect(llmService.initializeProvider).toHaveBeenCalledWith({
           engine: 'chatgpt',
           apiKey: 'sk-restored-openai-key',
           ollamaUrl: 'http://localhost:11434',
@@ -486,7 +486,7 @@ describe('Wizard Component', () => {
 
   describe('prompt response caching', () => {
     it('reuses cached live test output and supports explicit refresh', async () => {
-      vi.mocked(geminiService.runPrompt)
+      vi.mocked(llmService.runPrompt)
         .mockResolvedValueOnce('First provider output')
         .mockResolvedValueOnce('Refreshed provider output');
 
@@ -511,7 +511,7 @@ describe('Wizard Component', () => {
       await waitFor(() => {
         expect(screen.getByText(/First provider output/i)).toBeInTheDocument();
       });
-      expect(geminiService.runPrompt).toHaveBeenCalledTimes(1);
+      expect(llmService.runPrompt).toHaveBeenCalledTimes(1);
 
       fireEvent.click(screen.getByRole('button', { name: /Clear/i }));
       fireEvent.click(screen.getAllByRole('button', { name: /Live Resilience Test/i })[0]);
@@ -520,14 +520,14 @@ describe('Wizard Component', () => {
         expect(screen.getByText(/First provider output/i)).toBeInTheDocument();
       });
       expect(screen.getByText(/Cached response/i)).toBeInTheDocument();
-      expect(geminiService.runPrompt).toHaveBeenCalledTimes(1);
+      expect(llmService.runPrompt).toHaveBeenCalledTimes(1);
 
       fireEvent.click(screen.getByRole('button', { name: /Refresh/i }));
 
       await waitFor(() => {
         expect(screen.getByText(/Refreshed provider output/i)).toBeInTheDocument();
       });
-      expect(geminiService.runPrompt).toHaveBeenCalledTimes(2);
+      expect(llmService.runPrompt).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -549,7 +549,7 @@ describe('Wizard Component', () => {
     });
 
     it('should show recovery UI when provider initialization fails and clear it after retry', async () => {
-      vi.mocked(geminiService.initializeProvider)
+      vi.mocked(llmService.initializeProvider)
         .mockImplementationOnce(() => {
           throw new Error('Init failed');
         })
@@ -567,11 +567,11 @@ describe('Wizard Component', () => {
         expect(screen.queryByTestId('incident-init')).not.toBeInTheDocument();
       });
 
-      expect(geminiService.initializeProvider).toHaveBeenCalledTimes(2);
+      expect(llmService.initializeProvider).toHaveBeenCalledTimes(2);
     });
 
     it('should recover from analysis failure when retry succeeds', async () => {
-      vi.mocked(geminiService.analyzePrompt).mockRejectedValueOnce(new Error('Analyze failed'));
+      vi.mocked(llmService.analyzePrompt).mockRejectedValueOnce(new Error('Analyze failed'));
 
       render(<Wizard />);
       fireEvent.change(screen.getByPlaceholderText(/What do you want the AI to do/i), {
@@ -590,11 +590,11 @@ describe('Wizard Component', () => {
         expect(screen.getByText(/Refine Architecture/i)).toBeInTheDocument();
       });
 
-      expect(geminiService.analyzePrompt).toHaveBeenCalledTimes(2);
+      expect(llmService.analyzePrompt).toHaveBeenCalledTimes(2);
     });
 
     it('should recover from variation generation failure when retry succeeds', async () => {
-      vi.mocked(geminiService.generateVariations).mockRejectedValueOnce(new Error('Variations failed'));
+      vi.mocked(llmService.generateVariations).mockRejectedValueOnce(new Error('Variations failed'));
 
       render(<Wizard />);
       fireEvent.change(screen.getByPlaceholderText(/What do you want the AI to do/i), {
@@ -618,15 +618,15 @@ describe('Wizard Component', () => {
         expect(screen.getByText(/Forged Variations/i)).toBeInTheDocument();
       });
 
-      expect(geminiService.generateVariations).toHaveBeenCalledTimes(2);
+      expect(llmService.generateVariations).toHaveBeenCalledTimes(2);
     });
 
     it('should recover from battle failure when retry succeeds', async () => {
-      vi.mocked(geminiService.runPrompt)
+      vi.mocked(llmService.runPrompt)
         .mockRejectedValueOnce(new Error('Battle failed'))
         .mockResolvedValueOnce('Output A')
         .mockResolvedValueOnce('Output B');
-      vi.mocked(geminiService.judgeArenaOutputs).mockResolvedValueOnce({
+      vi.mocked(llmService.judgeArenaOutputs).mockResolvedValueOnce({
         winner: 'A',
         reasoning: 'A is better for the task.',
       });
@@ -664,8 +664,8 @@ describe('Wizard Component', () => {
         expect(screen.getByText(/A WINS/i)).toBeInTheDocument();
       });
 
-      expect(geminiService.runPrompt).toHaveBeenCalledTimes(3);
-      expect(geminiService.judgeArenaOutputs).toHaveBeenCalledTimes(1);
+      expect(llmService.runPrompt).toHaveBeenCalledTimes(3);
+      expect(llmService.judgeArenaOutputs).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -751,7 +751,7 @@ describe('Wizard Component', () => {
 
   describe('results interactions', () => {
     it('applies accepted compression results back into a variation', async () => {
-      vi.mocked(geminiService.generateVariations).mockResolvedValueOnce([
+      vi.mocked(llmService.generateVariations).mockResolvedValueOnce([
         {
           id: '1',
           type: 'precisionist',
@@ -760,7 +760,7 @@ describe('Wizard Component', () => {
           content: 'Return JSON for [TOPIC] with citations.',
         },
       ]);
-      vi.mocked(geminiService.compressPrompt).mockResolvedValueOnce('Compact JSON for [TOPIC].');
+      vi.mocked(llmService.compressPrompt).mockResolvedValueOnce('Compact JSON for [TOPIC].');
 
       render(<Wizard />);
       fireEvent.change(screen.getByPlaceholderText(/What do you want the AI to do/i), {
@@ -788,7 +788,7 @@ describe('Wizard Component', () => {
     });
 
     it('keeps the original variation when safe-mode compression drops a required variable', async () => {
-      vi.mocked(geminiService.generateVariations).mockResolvedValueOnce([
+      vi.mocked(llmService.generateVariations).mockResolvedValueOnce([
         {
           id: '1',
           type: 'precisionist',
@@ -797,7 +797,7 @@ describe('Wizard Component', () => {
           content: 'Return JSON for [TOPIC] with citations.',
         },
       ]);
-      vi.mocked(geminiService.compressPrompt).mockResolvedValueOnce('Return JSON with citations.');
+      vi.mocked(llmService.compressPrompt).mockResolvedValueOnce('Return JSON with citations.');
 
       render(<Wizard />);
       fireEvent.change(screen.getByPlaceholderText(/What do you want the AI to do/i), {
@@ -823,10 +823,10 @@ describe('Wizard Component', () => {
     });
 
     it('runs the arena flow and shows the judged winner', async () => {
-      vi.mocked(geminiService.runPrompt)
+      vi.mocked(llmService.runPrompt)
         .mockResolvedValueOnce('Arena output A')
         .mockResolvedValueOnce('Arena output B');
-      vi.mocked(geminiService.judgeArenaOutputs).mockResolvedValueOnce({
+      vi.mocked(llmService.judgeArenaOutputs).mockResolvedValueOnce({
         winner: 'A',
         reasoning: 'Prompt A followed the format more closely.',
       });
@@ -858,12 +858,12 @@ describe('Wizard Component', () => {
     });
 
     it('reuses cached arena results on repeat fight and supports explicit refresh', async () => {
-      vi.mocked(geminiService.runPrompt)
+      vi.mocked(llmService.runPrompt)
         .mockResolvedValueOnce('Arena output A')
         .mockResolvedValueOnce('Arena output B')
         .mockResolvedValueOnce('Arena output A refreshed')
         .mockResolvedValueOnce('Arena output B refreshed');
-      vi.mocked(geminiService.judgeArenaOutputs)
+      vi.mocked(llmService.judgeArenaOutputs)
         .mockResolvedValueOnce({
           winner: 'A',
           reasoning: 'First verdict',
@@ -894,18 +894,18 @@ describe('Wizard Component', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: /^fight$/i }));
       expect(await screen.findByText(/First verdict/i)).toBeInTheDocument();
-      expect(vi.mocked(geminiService.runPrompt)).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(geminiService.judgeArenaOutputs)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(llmService.runPrompt)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(llmService.judgeArenaOutputs)).toHaveBeenCalledTimes(1);
 
       fireEvent.click(screen.getByRole('button', { name: /^fight$/i }));
       expect(await screen.findByText(/Cached response/i)).toBeInTheDocument();
-      expect(vi.mocked(geminiService.runPrompt)).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(geminiService.judgeArenaOutputs)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(llmService.runPrompt)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(llmService.judgeArenaOutputs)).toHaveBeenCalledTimes(1);
 
       fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
       expect(await screen.findByText(/Refreshed verdict/i)).toBeInTheDocument();
-      expect(vi.mocked(geminiService.runPrompt)).toHaveBeenCalledTimes(4);
-      expect(vi.mocked(geminiService.judgeArenaOutputs)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(llmService.runPrompt)).toHaveBeenCalledTimes(4);
+      expect(vi.mocked(llmService.judgeArenaOutputs)).toHaveBeenCalledTimes(2);
     });
 
     it('preloads only the currently selected provider hint', async () => {

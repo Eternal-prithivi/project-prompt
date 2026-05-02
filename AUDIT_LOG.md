@@ -827,3 +827,92 @@ Use this template for all future sessions:
     - **Notes**: Existing React `act(...)` warnings in Wizard tests are pre-existing noise and did not fail gates.
 
   ---
+
+## 2026-05-02 — Phase 7: Offline-First Behaviors
+
+- **SESSION_ID**: 2026-05-02-phase7-01
+- **AGENT_NAME**: Antigravity
+- **Goal**: Implement resilient offline-first behaviors including network state detection, UI feedback, and fallback to local-only providers.
+- **Context**: Phase 7 ensures the app remains functional when offline by blocking cloud requests instantly instead of timing out, and preserving local model usage (Ollama).
+- **Scope (files)**:
+  - `src/hooks/useNetworkStatus.ts`
+  - `src/__tests__/hooks/useNetworkStatus.test.ts`
+  - `src/services/providers/validation.ts`
+  - `src/services/geminiService.ts`
+  - `src/__tests__/services/validation.test.ts`
+  - `src/__tests__/services/geminiService.routing.test.ts`
+  - `src/components/Wizard.tsx`
+  - `src/components/ModelGallery.tsx`
+  - `PROGRESS.md`, `AUDIT_LOG.md`, `SCRATCHPAD.md`
+- **Actions**:
+  - Created custom `useNetworkStatus` React hook to monitor `navigator.onLine`.
+  - Added offline fast-fail in `validation.ts` to immediately reject cloud key validation if offline.
+  - Added offline fast-fail check in `geminiService.ts` to block delegation for cloud providers when offline.
+  - Integrated `useNetworkStatus` into `Wizard.tsx` to display an amber Offline Banner and disable cloud provider Cards in Settings.
+  - Integrated `useNetworkStatus` into `ModelGallery.tsx` to disable the download button and indicate internet requirement for new Ollama models.
+- **TDD evidence**:
+  - Wrote `useNetworkStatus.test.ts`, verified 100% pass before moving on.
+  - Wrote offline fast-fail tests for validation logic.
+  - Wrote offline routing block tests for `geminiService`.
+- **Verification**:
+  - `npm test -- --run` -> passed (403 tests)
+  - `npm run build` -> passed
+- **Outcome**: done
+- **Handoff**:
+  - **Next step**: Phase 8: Advanced analytics and telemetry
+  - **Risks**: Browsers handle `navigator.onLine` slightly differently, but it generally covers disconnected states. Cloud provider APIs are sufficiently blocked.
+
+---
+
+## 2026-05-02 — Refactor: Rename geminiService to llmService
+
+- **SESSION_ID**: 2026-05-02-refactor-rename
+- **AGENT_NAME**: Antigravity
+- **Goal**: Rename `geminiService` to `llmService` across the codebase for consistency, as it routes all providers.
+- **Context**: The `geminiService.ts` file acted as the central router for ChatGPT, Claude, Grok, DeepSeek, Ollama, and Gemini. Its historical name was misleading for future maintainability.
+- **Scope (files)**:
+  - `src/services/geminiService.ts` -> `src/services/llmService.ts`
+  - `src/__tests__/services/geminiService.routing.test.ts` -> `src/__tests__/services/llmService.routing.test.ts`
+  - `src/components/Wizard.tsx`, `CompressionServiceModal.tsx`
+  - `src/__tests__/**/*.ts(x)`
+  - `README.md`, `AI_CONTEXT.md`, `AI_RULES.md`, `DECISIONS.md`
+- **Actions**:
+  - Renamed the service and routing test files.
+  - Replaced all imports and string occurrences of `geminiService` with `llmService` across source files and tests.
+  - Replaced string occurrences in documentation and historical logs to ensure consistency.
+- **Verification**:
+  - `npm run lint` -> passed
+  - `npm test -- --run` -> passed (406 tests)
+  - `npm run build` -> passed
+- **Outcome**: done
+
+---
+
+## 2026-05-02 — Phase 8: Advanced Analytics and Telemetry
+
+- **SESSION_ID**: 2026-05-02-phase8-01
+- **AGENT_NAME**: Antigravity
+- **Goal**: Implement a local, privacy-preserving advanced analytics and telemetry dashboard to visualize usage statistics.
+- **Context**: The app should provide insights into token compression savings, provider usage distribution, and battle arena performance, all stored securely in `localStorage`.
+- **Scope (files)**:
+  - `src/services/utils/telemetryService.ts`
+  - `src/__tests__/utils/telemetryService.test.ts`
+  - `src/services/llmService.ts`
+  - `src/components/Wizard.tsx`
+  - `src/components/AnalyticsDashboard.tsx`
+  - `src/__tests__/components/AnalyticsDashboard.test.tsx`
+  - `PROGRESS.md`, `walkthrough.md`
+- **Actions**:
+  - Created `telemetryService.ts` to manage persistence of metrics: prompt runs, compressions, cost savings, provider usage, battle wins.
+  - Hooked telemetry recorders into `llmService.ts` (`runPrompt`, `compressPrompt`) and `Wizard.tsx` (`judgeArenaOutputs`).
+  - Built a dynamic `AnalyticsDashboard` UI overlay featuring top-level stats cards, an animated provider distribution bar chart, and a battle arena leaderboard.
+  - Added "ANALYTICS" button to the main navigation header.
+- **Verification**:
+  - `npm test -- --run` -> passed (413 tests)
+  - `npm run lint` -> passed
+  - `npm run build` -> passed, verified dashboard is lazy-loaded correctly.
+- **Outcome**: done
+- **Handoff**:
+  - Phase 8 is complete. The application now possesses a comprehensive local telemetry suite without compromising on privacy.
+
+---

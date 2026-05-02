@@ -33,17 +33,17 @@ Settled architecture and design decisions for Prompt Architect.
 
 **Date:** 2026-04-23
 **Decision:** All LLM integrations must implement `ILLMProvider`. UI components and
-`geminiService.ts` must never call provider SDKs directly.
+`llmService.ts` must never call provider SDKs directly.
 **Why:** Enables runtime provider swapping, consistent error handling, and isolated testing.
 **Alternatives rejected:** Direct SDK calls in Wizard.tsx (rejected — couples UI to provider).
 **Impact:** All 6 providers (Gemini, DeepSeek, Ollama, ChatGPT, Claude, Grok) implement this interface.
 
 ---
 
-## DEC-002 — Delegation layer kept in geminiService.ts (historical naming)
+## DEC-002 — Delegation layer kept in llmService.ts (historical naming)
 
 **Date:** 2026-04-23
-**Decision:** The delegation/routing layer file is named `geminiService.ts` even though
+**Decision:** The delegation/routing layer file is named `llmService.ts` even though
 it now routes to all providers, not just Gemini.
 **Why:** Renaming would break existing imports across the codebase for no functional gain.
 **Note:** The name is misleading but intentional. Do not rename without explicit user instruction.
@@ -155,7 +155,7 @@ localStorage quota is edge case UX.
 ## DEC-012 — Selected provider owns request routing and default models
 
 **Date:** 2026-04-30
-**Decision:** The provider selected in Settings is the only provider that should receive runtime LLM requests. `geminiService.ts` remains the shared delegation layer, but it must not inject provider-specific default model names into cross-provider calls. If `runPrompt()` receives no model, the currently selected provider applies its own default.
+**Decision:** The provider selected in Settings is the only provider that should receive runtime LLM requests. `llmService.ts` remains the shared delegation layer, but it must not inject provider-specific default model names into cross-provider calls. If `runPrompt()` receives no model, the currently selected provider applies its own default.
 **Why:** A Gemini-specific default in the shared delegation layer can leak a Gemini model name into ChatGPT, Ollama, Claude, Grok, or DeepSeek requests, even though the selected provider is otherwise correct.
 **Impact:** Provider routing tests must cover delegation to the selected provider only, provider switching after reinitialization, and selected-provider defaults when no model is supplied.
 
@@ -171,7 +171,7 @@ localStorage quota is edge case UX.
 **Date:** 2026-05-01
 **Decision:** Live prompt test responses are cached in `sessionStorage` by provider, model, and resolved prompt text. Cached results are reused for identical test runs, and the result panel exposes an explicit refresh action to bypass the cache.
 **Why:** Re-testing unchanged prompt variations should not repeatedly spend latency or provider quota, but users still need a clear way to request a fresh model response.
-**Impact:** Cache logic belongs in `src/services/utils/promptResponseCache.ts`; UI flows must show when a reused result came from cache and must keep refresh behavior provider-routed through `geminiService.runPrompt`.
+**Impact:** Cache logic belongs in `src/services/utils/promptResponseCache.ts`; UI flows must show when a reused result came from cache and must keep refresh behavior provider-routed through `llmService.runPrompt`.
 
 ## DEC-015 — Cloud provider SDKs load on provider use
 

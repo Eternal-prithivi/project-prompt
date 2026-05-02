@@ -8,9 +8,25 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## In progress
 
-- None (Phase 6.5 battle cache + selected-provider preload hints complete)
+- None (Phase 7 offline-first behaviors complete)
 
 ## Completed recently
+
+- **Phase 7: Offline-First Behaviors** ✅ COMPLETE
+  - Added `src/hooks/useNetworkStatus.ts` to detect and expose `navigator.onLine` state
+  - Wired `Wizard.tsx` to display a persistent Offline Banner when network is disconnected
+  - Disabled cloud provider selection in Settings when offline, allowing only Local (Ollama)
+  - Enhanced `ModelGallery.tsx` to prevent downloading Ollama models when offline while clearly indicating internet requirements
+  - Added offline fast-fail validation in `validation.ts` so cloud provider validation rejects instantly instead of hanging
+  - Added offline fast-fail in `geminiService.ts` delegation layer to block cloud prompt executions when disconnected
+  - Added tests:
+    - `src/__tests__/hooks/useNetworkStatus.test.ts`
+    - `src/__tests__/services/validation.test.ts` offline fast-fail coverage
+    - `src/__tests__/services/geminiService.routing.test.ts` offline block coverage
+  - Verification passed:
+    - `npm test -- --run src/__tests__/hooks/useNetworkStatus.test.ts`
+    - `npm test -- --run` (all 403 tests passing)
+    - `npm run build`
 
 - **Phase 6.5: Battle Cache Policy + Selected-Provider Preload Hints** ✅ COMPLETE
   - Added `src/services/utils/battleResponseCache.ts` for session-scoped A/B battle output caching
@@ -294,9 +310,16 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 ## Planned next (suggested)
 
-1. Phase 7: Offline-first behaviors (offline mode detection, local-only fallback)
-2. Phase 8: Advanced analytics and telemetry (optional future)
-3. Additional performance profiling pass (route/component-level profiling if needed)
+- **Phase 7 offline-first** ✅ COMPLETE
+- **Phase 8 advanced analytics** ✅ COMPLETE
+  - Built `telemetryService.ts` for tracking local usage and cost savings
+  - Created `AnalyticsDashboard.tsx` for visualizing local stats (providers, savings, tokens)
+  - Intercepted routing and arena events for accurate metrics
+
+## Planned next (suggested)
+
+1. Additional performance profiling pass (route/component-level profiling if needed)
+2. Add comprehensive user guide or help documentation
 
 ## Blockers / risks
 
@@ -320,5 +343,6 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 - Phase 6.3 prompt response caching complete: repeated live tests reuse session cache, and `REFRESH` bypasses cache for fresh provider output
 - Phase 6.4 provider SDK dynamic loading complete: initial HTML no longer modulepreloads Gemini/OpenAI/Anthropic SDK chunks
 - Phase 6.5 complete: battle arena now reuses session cache for repeat fights, `REFRESH` fetches fresh outputs, and selected provider changes trigger best-effort preload hints for that provider only
-- 398 tests passing via `npm test -- --run`, lint clean, coverage command passing, build passing, continuity check passing
-- Next: Phase 7 offline-first behaviors or Phase 8 advanced analytics
+- Phase 7 complete: offline-first behaviors added with network detection, UI indicators, and local-only fallback blocking cloud requests.
+- Phase 8 complete: advanced analytics tracking and UI dashboard for local usage and savings.
+- 413 tests passing via `npm test -- --run`, lint clean, coverage command passing, build passing, continuity check passing

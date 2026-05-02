@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VariationCard } from '../../components/Wizard';
-import * as geminiService from '../../services/geminiService';
+import * as llmService from '../../services/llmService';
 import * as compressionCache from '../../services/utils/compressionCache';
 
-vi.mock('../../services/geminiService', () => ({
+vi.mock('../../services/llmService', () => ({
   analyzePrompt: vi.fn(),
   generateVariations: vi.fn(),
   magicRefine: vi.fn(),
@@ -49,7 +49,7 @@ describe('VariationCard compression UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(compressionCache.getCachedCompression).mockReturnValue(null);
-    vi.mocked(geminiService.compressPrompt).mockResolvedValue('Compact JSON for [TOPIC].');
+    vi.mocked(llmService.compressPrompt).mockResolvedValue('Compact JSON for [TOPIC].');
   });
 
   it('renders fast mode by default and can switch into safe mode', () => {
@@ -87,7 +87,7 @@ describe('VariationCard compression UI', () => {
   });
 
   it('opens the test output panel using cached responses without calling the provider again', async () => {
-    vi.mocked(geminiService.runPrompt).mockResolvedValue('Provider output');
+    vi.mocked(llmService.runPrompt).mockResolvedValue('Provider output');
     renderCard();
 
     fireEvent.click(screen.getByRole('button', { name: /live resilience test/i }));
@@ -96,6 +96,6 @@ describe('VariationCard compression UI', () => {
       expect(screen.getByText(/Provider output/i)).toBeInTheDocument();
     });
 
-    expect(geminiService.runPrompt).toHaveBeenCalledTimes(1);
+    expect(llmService.runPrompt).toHaveBeenCalledTimes(1);
   });
 });

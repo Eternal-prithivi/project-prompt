@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 interface Model {
   name: string;
@@ -78,6 +79,7 @@ export const ModelGallery: React.FC<ModelGalleryProps> = ({
 }) => {
   const [models, setModels] = useState<Model[]>(MODELS);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const isOnline = useNetworkStatus();
 
   useEffect(() => {
     if (isOpen) {
@@ -326,12 +328,21 @@ export const ModelGallery: React.FC<ModelGalleryProps> = ({
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => downloadModel(model.name)}
-                          className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 font-medium whitespace-nowrap"
-                        >
-                          Download
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            onClick={() => downloadModel(model.name)}
+                            disabled={!isOnline}
+                            className={`px-3 py-2 rounded text-sm font-medium whitespace-nowrap transition-colors ${
+                              isOnline
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                            title={!isOnline ? "Internet connection required to download models" : ""}
+                          >
+                            Download
+                          </button>
+                          {!isOnline && <span className="text-[10px] text-red-500 font-medium">Requires Internet</span>}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -16,12 +16,12 @@ Prompt Architect helps users convert weak prompts into production-grade prompts 
 - UI-centric app with orchestration in `src/components/Wizard.tsx`
 - Provider abstraction via `ILLMProvider` contract (`src/services/types/ILLMProvider.ts`)
 - Provider instances are created in `src/services/providerFactory.ts`
-- Runtime delegation to the currently active provider through `src/services/geminiService.ts`
+- Runtime delegation to the currently active provider through `src/services/llmService.ts`
 - Credentials stored encrypted in browser local storage through `src/services/credentialStore.ts`
 
 ## Core service map
 
-- `src/services/geminiService.ts`
+- `src/services/llmService.ts`
   - global provider lifecycle + method delegation
 - `src/services/providerFactory.ts`
   - maps config to provider implementation
@@ -50,7 +50,7 @@ All implement `ILLMProvider`.
 Provider routing invariant:
 
 - Settings choose exactly one active provider at a time.
-- `src/services/geminiService.ts` is the only runtime delegation layer used by UI workflows.
+- `src/services/llmService.ts` is the only runtime delegation layer used by UI workflows.
 - All prompt operations (`analyzePrompt`, `generateVariations`, `magicRefine`, `integrateAnswers`, `generateExamples`, `runPrompt`, `compressPrompt`, `judgeArenaOutputs`) must route to the currently initialized provider only.
 - Shared service methods must not embed provider-specific default models. If no model is passed, the selected provider owns its own default.
 

@@ -1,10 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VariationCard } from '../../components/Wizard';
-import * as geminiService from '../../services/geminiService';
+import * as llmService from '../../services/llmService';
 import * as compressionCache from '../../services/utils/compressionCache';
 
-vi.mock('../../services/geminiService', () => ({
+vi.mock('../../services/llmService', () => ({
   analyzePrompt: vi.fn(),
   generateVariations: vi.fn(),
   magicRefine: vi.fn(),
@@ -60,11 +60,11 @@ describe('VariationCard handleCompress', () => {
 
     expect(await screen.findByText(/Compression Results/i)).toBeInTheDocument();
     expect(screen.getByText(/Cached JSON with \[TOPIC\]\./i)).toBeInTheDocument();
-    expect(geminiService.compressPrompt).not.toHaveBeenCalled();
+    expect(llmService.compressPrompt).not.toHaveBeenCalled();
   });
 
   it('rejects safe-mode compressions that drop required variables', async () => {
-    vi.mocked(geminiService.compressPrompt).mockResolvedValue('Return JSON with citations.');
+    vi.mocked(llmService.compressPrompt).mockResolvedValue('Return JSON with citations.');
 
     render(<VariationCard {...baseProps} />);
 

@@ -21,7 +21,7 @@ Always read, in order:
 - Keep changes scoped to the active task
 - Use test-driven development for behavioral changes: write or update tests first, then implement the production change
 - Prefer a targeted failing test before the fix; if a failing-first cycle is impractical, explain why in `AUDIT_LOG.md`
-- Preserve existing architecture patterns (`providerFactory`, `geminiService`, `ILLMProvider`)
+- Preserve existing architecture patterns (`providerFactory`, `llmService`, `ILLMProvider`)
 - Reuse existing utilities before adding new ones (`timeout.ts`, `errors.ts`)
 - Prefer minimal-risk edits over large rewrites
 

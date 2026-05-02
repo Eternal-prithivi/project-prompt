@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { ILLMProvider, ProviderConfig } from '../../services/types/ILLMProvider';
 
 type ProviderMock = ILLMProvider & {
@@ -38,7 +38,7 @@ const createProviderMock = (id: string): ProviderMock => {
   };
 };
 
-describe('geminiService provider routing', () => {
+describe('llmService provider routing', () => {
   const providers = {
     gemini: createProviderMock('gemini'),
     chatgpt: createProviderMock('chatgpt'),
@@ -57,7 +57,7 @@ describe('geminiService provider routing', () => {
       createProvider: vi.fn((config: ProviderConfig) => providers[config.engine as keyof typeof providers]),
     }));
 
-    const service = await import('../../services/geminiService');
+    const service = await import('../../services/llmService');
     service.initializeProvider({ engine: 'chatgpt', apiKey: 'chatgpt-key' });
 
     await service.analyzePrompt('analyze this');
@@ -91,7 +91,7 @@ describe('geminiService provider routing', () => {
       createProvider: vi.fn((config: ProviderConfig) => providers[config.engine as keyof typeof providers]),
     }));
 
-    const service = await import('../../services/geminiService');
+    const service = await import('../../services/llmService');
     service.initializeProvider({ engine: 'chatgpt', apiKey: 'chatgpt-key' });
 
     await expect(service.runPrompt('run this')).resolves.toBe('chatgpt:chatgpt-default-model');
@@ -104,7 +104,7 @@ describe('geminiService provider routing', () => {
       createProvider: vi.fn((config: ProviderConfig) => providers[config.engine as keyof typeof providers]),
     }));
 
-    const service = await import('../../services/geminiService');
+    const service = await import('../../services/llmService');
     service.initializeProvider({ engine: 'gemini', apiKey: 'gemini-key' });
     await service.compressPrompt('first prompt');
 
@@ -120,5 +120,45 @@ describe('geminiService provider routing', () => {
     expect(providers.local.compressPrompt).toHaveBeenCalledTimes(1);
     expect(providers.local.compressPrompt).toHaveBeenCalledWith('second prompt');
     expect(providers.chatgpt.compressPrompt).not.toHaveBeenCalled();
+  });
+
+  describe('offline fast-fail', () => {
+    let originalOnLine: boolean;
+
+    beforeEach(() => {
+      originalOnLine = navigator.onLine;
+      Object.defineProperty(navigator, 'onLine', { writable: true, value: false });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(navigator, 'onLine', { writable: true, value: originalOnLine });
+    });
+
+    it('should throw an error when offline and using a cloud provider', async () => {
+      vi.doMock('../../services/providerFactory', () => ({
+        createProvider: vi.fn((config: ProviderConfig) => providers[config.engine as keyof typeof providers]),
+      }));
+
+      const service = await import('../../services/llmService');
+      service.initializeProvider({ engine: 'gemini', apiKey: 'gemini-key' });
+
+      await expect(service.analyzePrompt('test')).rejects.toThrow(/offline/i);
+      await expect(service.runPrompt('test')).rejects.toThrow(/offline/i);
+
+      expect(providers.gemini.analyzePrompt).not.toHaveBeenCalled();
+      expect(providers.gemini.runPrompt).not.toHaveBeenCalled();
+    });
+
+    it('should NOT throw an error when offline and using a local provider', async () => {
+      vi.doMock('../../services/providerFactory', () => ({
+        createProvider: vi.fn((config: ProviderConfig) => providers[config.engine as keyof typeof providers]),
+      }));
+
+      const service = await import('../../services/llmService');
+      service.initializeProvider({ engine: 'local' });
+
+      await expect(service.runPrompt('test')).resolves.toBe('local:local-default-model');
+      expect(providers.local.runPrompt).toHaveBeenCalled();
+    });
   });
 });

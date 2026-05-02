@@ -23,6 +23,18 @@ describe('validation', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('should fast-fail when offline', async () => {
+      const originalOnLine = navigator.onLine;
+      Object.defineProperty(navigator, 'onLine', { writable: true, value: false });
+      
+      const result = await validateGeminiKey('AIzaSy...');
+      
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('offline');
+      
+      Object.defineProperty(navigator, 'onLine', { writable: true, value: originalOnLine });
+    });
+
     it('should return invalid for empty key', async () => {
       const result = await validateGeminiKey('');
 
@@ -79,6 +91,18 @@ describe('validation', () => {
       const result = await validateDeepseekKey('sk-deepseek...');
 
       expect(result.valid).toBe(true);
+    });
+
+    it('should fast-fail when offline', async () => {
+      const originalOnLine = navigator.onLine;
+      Object.defineProperty(navigator, 'onLine', { writable: true, value: false });
+      
+      const result = await validateDeepseekKey('sk-deepseek...');
+      
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('offline');
+      
+      Object.defineProperty(navigator, 'onLine', { writable: true, value: originalOnLine });
     });
 
     it('should return invalid for empty key', async () => {
@@ -152,6 +176,7 @@ describe('validation', () => {
     });
 
     it('should handle malformed URL gracefully', async () => {
+      global.fetch = vi.fn().mockRejectedValue(new TypeError('Invalid URL'));
       const result = await validateOllamaConnection('not-a-valid-url');
 
       expect(result.valid).toBe(false);
