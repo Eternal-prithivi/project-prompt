@@ -312,14 +312,14 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 
 - **Phase 7 offline-first** ✅ COMPLETE
 - **Phase 8 advanced analytics** ✅ COMPLETE
-  - Built `telemetryService.ts` for tracking local usage and cost savings
-  - Created `AnalyticsDashboard.tsx` for visualizing local stats (providers, savings, tokens)
-  - Intercepted routing and arena events for accurate metrics
+- **Comprehensive User Guide & Help Docs** ✅ COMPLETE
+  - Built interactive `HelpDashboard.tsx` lazy-loaded modal.
+  - Created repository `USER_GUIDE.md`.
 
 ## Planned next (suggested)
 
 1. Additional performance profiling pass (route/component-level profiling if needed)
-2. Add comprehensive user guide or help documentation
+2. Final polish and repository clean-up.
 
 ## Blockers / risks
 
@@ -345,4 +345,5 @@ Build and maintain production-ready reliability and observability for Prompt Arc
 - Phase 6.5 complete: battle arena now reuses session cache for repeat fights, `REFRESH` fetches fresh outputs, and selected provider changes trigger best-effort preload hints for that provider only
 - Phase 7 complete: offline-first behaviors added with network detection, UI indicators, and local-only fallback blocking cloud requests.
 - Phase 8 complete: advanced analytics tracking and UI dashboard for local usage and savings.
-- 413 tests passing via `npm test -- --run`, lint clean, coverage command passing, build passing, continuity check passing
+- Help Documentation complete: integrated in-app Help dashboard and external User Guide.
+- 416 tests passing via `npm test -- --run`, lint clean, coverage command passing, build passing, continuity check passing

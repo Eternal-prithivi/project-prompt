@@ -33,6 +33,9 @@ const CompressionServiceModal = React.lazy(() =>
 const AnalyticsDashboard = React.lazy(() =>
   import('./AnalyticsDashboard').then((module) => ({ default: module.AnalyticsDashboard }))
 );
+const HelpDashboard = React.lazy(() =>
+  import('./HelpDashboard').then((module) => ({ default: module.HelpDashboard }))
+);
 
 const MetricBar = ({ label, score }: { label: string, score: number }) => (
   <div className="bg-black/20 border border-white/5 p-3 rounded-xl flex flex-col items-center shadow-inner">
@@ -715,6 +718,7 @@ export const Wizard = () => {
   const [arenaSelections, setArenaSelections] = useState<string[]>([]);
   const [isArenaModalOpen, setIsArenaModalOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1461,6 +1465,9 @@ export const Wizard = () => {
         {isAnalyticsOpen && (
           <AnalyticsDashboard onClose={() => setIsAnalyticsOpen(false)} />
         )}
+        {isHelpOpen && (
+          <HelpDashboard onClose={() => setIsHelpOpen(false)} />
+        )}
       </React.Suspense>
 
       {/* Settings Overlay */}
@@ -1753,6 +1760,9 @@ export const Wizard = () => {
             </Button>
             <Button variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="gap-2 font-mono">
               <Library className="w-4 h-4"/> <span className="hidden md:inline">LIBRARY</span>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setIsHelpOpen(true)} className="gap-2 font-mono text-emerald-400/70 hover:text-emerald-300 border border-transparent hover:border-emerald-400/20">
+              <Info className="w-4 h-4" /> <span className="hidden md:inline">HELP</span>
             </Button>
           </div>
         </header>
